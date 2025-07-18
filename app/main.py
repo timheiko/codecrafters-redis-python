@@ -1,9 +1,18 @@
 import socket  # noqa: F401
 import sys
+import threading
 
 
 def log(*args: list[any]) -> None:
     print(*args, file=sys.stderr)
+
+
+def handle_connection(connection, address):
+    log("address ", address)
+    with connection:
+        while len(data := connection.recv(1024).decode()) > 0:
+            if "PING" in data.upper():
+                connection.sendall(b"+PONG\r\n")
 
 
 def main():
@@ -11,12 +20,7 @@ def main():
 
     while True:
         connection, address = server_socket.accept()
-        log("address ", address)
-        with connection:
-            while True:
-                data = connection.recv(1024).decode()
-                if "PING" in data.upper():
-                    connection.sendall(b"+PONG\r\n")
+        threading.Thread(target=handle_connection, args=(connection, address)).start()
 
 
 if __name__ == "__main__":

@@ -12,8 +12,11 @@ def main():
     while True:
         connection, address = server_socket.accept()
         log("address ", address)
-        
-        connection.sendall(b"+PONG\r\n")
+        with connection:
+            while True:
+                data = connection.recv(1024).decode()
+                if "PING" in data.upper():
+                    connection.sendall(b"+PONG\r\n")
 
 
 if __name__ == "__main__":

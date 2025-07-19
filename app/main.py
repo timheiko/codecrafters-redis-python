@@ -3,6 +3,7 @@ import socket  # noqa: F401
 import sys
 import threading
 from typing import ClassVar, Self
+from datetime import datetime, timedelta
 
 
 def log(*args: list[any]) -> None:
@@ -60,7 +61,7 @@ class Message:
 
 
     def encode_bulk(self, contents: list[any] = []) -> bytes:
-        contents = contents or self.contents[1:]
+        contents = contents
         payload = b""
         if len(contents) == 0:
             payload = b"$-1" + Message.SEPARATOR
@@ -94,13 +95,28 @@ def handle_connection(connection, address):
             elif command == "ECHO":
                 connection.sendall(message.encode())
             elif command == "SET":
-                key, value, *_ = message.contents[1:]
-                print("key", key, "value", value)
-                storage[key] = value
+                key, value, *rest = message.contents[1:]
+                if len(rest) > 0:
+                    exp_command, duration = rest[0].upper(), int(rest[1])
+                    storage[key] = (value, datetime.now(), duration)
+                else:
+                    storage[key] = (value, datetime.now(), 10 ** 10)
                 connection.sendall(message.encode(["OK"]))
             elif command == "GET":
                 key, *_ = message.contents[1:]
-                connection.sendall(message.encode_bulk([storage.get(key)]))
+                if key not in storage:
+                    return connection.sendall(message.encode_bulk([]))
+                else:
+                    log(storage[key])
+                    value, datetime_added, expiration = storage[key]
+                    datetime_now = datetime.now()
+                    duration = (datetime_now - datetime_added) / timedelta(milliseconds=1)
+                    if duration >= expiration:
+                        log("expiring key:", key)
+                        del storage[key]
+                        return connection.sendall(message.encode_bulk([]))
+                    else:
+                        connection.sendall(message.encode_bulk([value]))
             else:
                 raise Exception(f"Unknown command: {data}")
 

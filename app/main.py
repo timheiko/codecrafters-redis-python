@@ -59,6 +59,30 @@ class Message:
         return payload
 
 
+    def encode_bulk(self, contents: list[any] = []) -> bytes:
+        contents = contents or self.contents[1:]
+        payload = b""
+        if len(contents) == 0:
+            payload = b"$-1" + Message.SEPARATOR
+        else:
+            val = contents[0]
+            if val is None:
+                payload = b"$-1\r\n"
+            else:
+                payload = Message.SEPARATOR.join([
+                    f"${len(contents[0])}".encode(),
+                    contents[0].encode(),
+                    b"",
+                ])
+        log("payload >>> ", payload)
+        
+        return payload
+
+
+
+storage = {}
+
+
 def handle_connection(connection, address):
     log("address ", address)
     with connection:
@@ -69,6 +93,14 @@ def handle_connection(connection, address):
                 connection.sendall(message.encode(["PONG"]))
             elif command == "ECHO":
                 connection.sendall(message.encode())
+            elif command == "SET":
+                key, value, *_ = message.contents[1:]
+                print("key", key, "value", value)
+                storage[key] = value
+                connection.sendall(message.encode(["OK"]))
+            elif command == "GET":
+                key, *_ = message.contents[1:]
+                connection.sendall(message.encode_bulk([storage.get(key)]))
             else:
                 raise Exception(f"Unknown command: {data}")
 

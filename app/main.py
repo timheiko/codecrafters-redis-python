@@ -94,6 +94,10 @@ def handle_connection(connection, address):
                     connection.sendall(encode([]))
                 else:
                     connection.sendall(encode(storage.get_list_range(key, start, end)))
+            elif command == "LLEN":
+                key = message.contents[1]
+                values = storage.get(key) or []
+                connection.sendall(encode(len(values)))
             else:
                 raise Exception(f"Unknown command: {data}")
 

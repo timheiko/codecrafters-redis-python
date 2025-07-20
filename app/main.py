@@ -87,7 +87,7 @@ def handle_connection(connection, address):
                 if values is None:
                     connection.sendall(encode([]))
                 else:
-                    connection.sendall(encode(values[int(start) : int(end) + 1]))
+                    connection.sendall(encode(storage.get_list_range(key, start, end)))
             else:
                 raise Exception(f"Unknown command: {data}")
 

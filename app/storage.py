@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import sys
 from typing import Optional
 
 
@@ -22,4 +23,7 @@ class Storage:
 
     def get_list_range(self, key: str, start: int, end: int) -> list[any]:
         values = self.get(key) or []
-        return values[start : end + 1]
+        n = len(values)
+        start = start if start >= 0 else max(0, n + start)
+        end = (end if end >= 0 else max(0, n + end)) + 1
+        return values[start:end]

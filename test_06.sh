@@ -22,3 +22,6 @@ redis-cli LRANGE list_key2 10 1
 redis-cli LRANGE list_key2 -2 -1
 redis-cli LRANGE list_key2 0 -3
 redis-cli LRANGE missing_list_key 0 1
+
+redis-cli LPUSH list_key2 "m", "x"
+redis-cli GET list_key2

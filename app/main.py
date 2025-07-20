@@ -80,6 +80,12 @@ def handle_connection(connection, address):
                 values.extend(items)
                 storage.set(key, values)
                 connection.sendall(encode(len(values)))
+            elif command == "LPUSH":
+                key, *items = message.contents[1:]
+                values = storage.get(key) or []
+                values = items[::-1] + values
+                storage.set(key, values)
+                connection.sendall(encode(len(values)))
             elif command == "LRANGE":
                 key, start, end = message.contents[1:]
                 start, end = int(start), int(end)

@@ -80,6 +80,14 @@ def handle_connection(connection, address):
                 values.extend(items)
                 storage.set(key, values)
                 connection.sendall(encode(len(values)))
+            elif command == "LRANGE":
+                key, start, end = message.contents[1:]
+                start, end = int(start), int(end)
+                values = storage.get(key)
+                if values is None:
+                    connection.sendall(encode([]))
+                else:
+                    connection.sendall(encode(values[int(start) : int(end) + 1]))
             else:
                 raise Exception(f"Unknown command: {data}")
 

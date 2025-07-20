@@ -19,3 +19,7 @@ class Storage:
 
     def set(self, key: str, value: any, duration_ms: int = 10**10) -> None:
         self.__storage[key] = (value, datetime.now(), duration_ms)
+
+    def get_list_range(self, key: str, start: int, end: int) -> list[any]:
+        values = self.get(key) or []
+        return values[start : end + 1]

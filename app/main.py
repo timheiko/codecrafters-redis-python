@@ -5,6 +5,9 @@ import threading
 from typing import ClassVar, Self
 from datetime import datetime, timedelta
 
+from app.resp import encode, encode_simple
+from app.storage import Storage
+
 
 def log(*args: list[any]) -> None:
     print(*args, file=sys.stderr)
@@ -15,73 +18,39 @@ class Message:
     contents: list[str]
     SEPARATOR: ClassVar[str] = b"\r\n"
 
-
     @staticmethod
     def parse(payload: bytes) -> Self:
         log("payload <<< ", payload)
         n, i = len(payload), 0
         contents = []
         while i < n:
-            if payload[i:i + 1] == b"*":
+            if payload[i : i + 1] == b"*":
                 new_line_sep_pos = payload.find(Message.SEPARATOR, i + 1)
-                length = int(payload[i + 1:new_line_sep_pos].decode())
+                length = int(payload[i + 1 : new_line_sep_pos].decode())
                 i = new_line_sep_pos + len(Message.SEPARATOR)
                 for _ in range(length):
-                    if payload[i:i + 1] == b"$":
+                    if payload[i : i + 1] == b"$":
                         text, i = Message.parse_text(payload, i)
                         contents.append(text)
             else:
                 raise Exception(f"Unknown data type: {chr(payload[i])}")
 
         return Message(contents=contents)
-    
 
     @staticmethod
     def parse_text(payload: bytes, offset: int) -> tuple[bytes, int]:
-        if payload[offset:offset + 1] == "$".encode():
+        if payload[offset : offset + 1] == "$".encode():
             new_line_sep_pos = payload.find(Message.SEPARATOR, offset + 1)
-            length = int(payload[offset + 1:new_line_sep_pos])
+            length = int(payload[offset + 1 : new_line_sep_pos])
             text_start = new_line_sep_pos + len(Message.SEPARATOR)
             text_end = text_start + length
             text = payload[text_start:text_end].decode()
             return (text, text_end + len(Message.SEPARATOR))
-        
+
         raise Exception(f"Cannot parse text from payload: {payload}")
 
-    def encode(self, contents: list[any] = []) -> bytes:
-        contents = contents or self.contents[1:]
-        payload = b""
-        if len(contents) == 0:
-            payload = b"*0" + Message.SEPARATOR
-        else:
-            payload = b"+" + " ".join(contents).encode() + Message.SEPARATOR
-        log("payload >>> ", payload)
-        
-        return payload
 
-
-    def encode_bulk(self, contents: list[any] = []) -> bytes:
-        contents = contents
-        payload = b""
-        if len(contents) == 0:
-            payload = b"$-1" + Message.SEPARATOR
-        else:
-            val = contents[0]
-            if val is None:
-                payload = b"$-1\r\n"
-            else:
-                payload = Message.SEPARATOR.join([
-                    f"${len(contents[0])}".encode(),
-                    contents[0].encode(),
-                    b"",
-                ])
-        log("payload >>> ", payload)
-        
-        return payload
-
-
-
-storage = {}
+storage = Storage()
 
 
 def handle_connection(connection, address):
@@ -91,32 +60,26 @@ def handle_connection(connection, address):
             message = Message.parse(data)
             command = message.contents[0].upper()
             if command == "PING":
-                connection.sendall(message.encode(["PONG"]))
+                connection.sendall(encode_simple("PONG"))
             elif command == "ECHO":
-                connection.sendall(message.encode())
+                connection.sendall(encode_simple(" ".join(message.contents[1:])))
             elif command == "SET":
                 key, value, *rest = message.contents[1:]
                 if len(rest) > 0:
-                    exp_command, duration = rest[0].upper(), int(rest[1])
-                    storage[key] = (value, datetime.now(), duration)
+                    _exp_command, duration = rest[0].upper(), int(rest[1])
+                    storage.set(key, value, duration)
                 else:
-                    storage[key] = (value, datetime.now(), 10 ** 10)
-                connection.sendall(message.encode(["OK"]))
+                    storage.set(key, value)
+                connection.sendall(encode_simple("OK"))
             elif command == "GET":
                 key, *_ = message.contents[1:]
-                if key not in storage:
-                    return connection.sendall(message.encode_bulk([]))
-                else:
-                    log(storage[key])
-                    value, datetime_added, expiration = storage[key]
-                    datetime_now = datetime.now()
-                    duration = (datetime_now - datetime_added) / timedelta(milliseconds=1)
-                    if duration >= expiration:
-                        log("expiring key:", key)
-                        del storage[key]
-                        return connection.sendall(message.encode_bulk([]))
-                    else:
-                        connection.sendall(message.encode_bulk([value]))
+                connection.sendall(encode(storage.get(key)))
+            elif command == "RPUSH":
+                key, *items = message.contents[1:]
+                values = storage.get(key) or []
+                values.extend(items)
+                storage.set(key, values)
+                connection.sendall(encode(len(values)))
             else:
                 raise Exception(f"Unknown command: {data}")
 

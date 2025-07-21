@@ -76,28 +76,30 @@ def handle_connection(connection, address):
                 connection.sendall(encode(storage.get(key)))
             elif command == "RPUSH":
                 key, *items = message.contents[1:]
-                values = storage.get(key) or []
+                values = storage.get_list(key)
                 values.extend(items)
                 storage.set(key, values)
                 connection.sendall(encode(len(values)))
             elif command == "LPUSH":
                 key, *items = message.contents[1:]
-                values = storage.get(key) or []
+                values = storage.get_list(key)
                 values = items[::-1] + values
                 storage.set(key, values)
                 connection.sendall(encode(len(values)))
             elif command == "LRANGE":
                 key, start, end = message.contents[1:]
                 start, end = int(start), int(end)
-                values = storage.get(key)
-                if values is None:
-                    connection.sendall(encode([]))
-                else:
-                    connection.sendall(encode(storage.get_list_range(key, start, end)))
+                values = storage.get_list(key)
+                connection.sendall(encode(storage.get_list_range(key, start, end)))
             elif command == "LLEN":
-                key = message.contents[1]
-                values = storage.get(key) or []
+                values = storage.get_list(message.contents[1])
                 connection.sendall(encode(len(values)))
+            elif command == "LPOP":
+                values = storage.get_list(message.contents[1])
+                if not values:
+                    connection.sendall(encode(None))
+                else:
+                    connection.sendall(encode(values.pop(0)))
             else:
                 raise Exception(f"Unknown command: {data}")
 

@@ -27,3 +27,4 @@ redis-cli LPUSH list_key2 "m", "x"
 redis-cli GET list_key2
 
 redis-cli LLEN list_key2
+redis-cli LPOP list_key2

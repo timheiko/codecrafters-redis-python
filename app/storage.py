@@ -21,8 +21,11 @@ class Storage:
     def set(self, key: str, value: any, duration_ms: int = 10**10) -> None:
         self.__storage[key] = (value, datetime.now(), duration_ms)
 
+    def get_list(self, key: str) -> list[any]:
+        return self.get(key) or []
+
     def get_list_range(self, key: str, start: int, end: int) -> list[any]:
-        values = self.get(key) or []
+        values = self.get_list(key)
         n = len(values)
         start = start if start >= 0 else max(0, n + start)
         end = (end if end >= 0 else max(0, n + end)) + 1

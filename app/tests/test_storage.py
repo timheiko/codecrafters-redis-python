@@ -80,3 +80,11 @@ class TestStorage(unittest.TestCase):
             self.storage.get_list_range("blueberry", 0, 2),
             ["raspberry", "grape", "orange"],
         )
+
+    def test_get_list(self):
+        self.storage.set("my_list", [1, 2])
+
+        self.assertEqual(self.storage.get_list("my_list"), [1, 2])
+
+    def test_get_list_missing(self):
+        self.assertEqual(self.storage.get_list("my_list"), [])

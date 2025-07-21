@@ -96,10 +96,15 @@ def handle_connection(connection, address):
                 connection.sendall(encode(len(values)))
             elif command == "LPOP":
                 values = storage.get_list(message.contents[1])
+                number = 1 if len(message.contents) < 3 else int(message.contents[2])
                 if not values:
                     connection.sendall(encode(None))
-                else:
+                elif number == 1:
                     connection.sendall(encode(values.pop(0)))
+                else:
+                    popped = values[:number]
+                    values[:number] = []
+                    connection.sendall(encode(popped))
             else:
                 raise Exception(f"Unknown command: {data}")
 

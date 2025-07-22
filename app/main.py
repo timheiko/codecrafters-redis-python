@@ -112,7 +112,7 @@ async def handle_echo(reader, writer):
                 values[:number] = []
                 writer.write(encode(popped))
         elif command == "BLPOP":
-            key = message.contents[1]
+            key, timeout = message.contents[1], float(message.contents[2])
             values = storage.get_list(key)
             if values:
                 writer.write(encode([key, values.pop(0)]))
@@ -120,8 +120,11 @@ async def handle_echo(reader, writer):
                 loop = asyncio.get_event_loop()
                 future = loop.create_future()
                 waiting_queue[key].append(future)
-                _ = await asyncio.wait_for(future, None)
-                writer.write(encode([key, storage.get_list(key).pop(0)]))
+                try:
+                    _ = await asyncio.wait_for(future, timeout if timeout > 0 else None)
+                    writer.write(encode([key, storage.get_list(key).pop(0)]))
+                except TimeoutError:
+                    writer.write(encode(None))
         else:
             raise Exception(f"Unknown command: {data}")
 

@@ -31,3 +31,7 @@ redis-cli LPOP list_key2
 redis-cli LLEN list_key2
 redis-cli LPOP list_key2 2
 redis-cli LLEN list_key2
+
+redis-cli BLPOP list_key2 0
+redis-cli BLPOP list_key3 0 &
+redis-cli RPUSH list_key3 "foo"

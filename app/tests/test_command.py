@@ -1,6 +1,6 @@
 import unittest
 
-from app.command import ECHO, PING, SET
+from app.command import ECHO, GET, PING, SET
 
 from app.storage import storage
 
@@ -27,6 +27,15 @@ class TestCommand(unittest.TestCase):
         key, value = "foo", "bar"
         self.assertEqual(SET(key, value, "px", "10").execute(), b"+OK\r\n")
         self.assertEqual(storage.get(key), value)
+
+    def test_get_exists(self):
+        key, value = "foo", "bar"
+        storage.set(key, value)
+        self.assertEqual(GET(key).execute(), b"$3\r\nbar\r\n")
+
+    def test_get_does_not_exist(self):
+        key = "foo"
+        self.assertEqual(GET(key).execute(), b"$-1\r\n")
 
 
 if __name__ == "__main__":

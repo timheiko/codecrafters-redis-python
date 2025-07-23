@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from app.resp import encode_simple
+from app.resp import encode, encode_simple
 
 from app.storage import storage
 
@@ -64,3 +64,18 @@ class SET(RedisCommand):
         else:
             storage.set(self.key, self.value)
         return encode_simple("OK")
+
+
+@dataclass
+class GET(RedisCommand):
+    key: str
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key, *_]:
+                self.key = key
+            case _:
+                raise ValueError
+
+    def execute(self):
+        return encode(storage.get(self.key))

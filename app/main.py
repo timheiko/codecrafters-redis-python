@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from app.command import ECHO, PING, SET
+from app.command import ECHO, GET, PING, SET
 
 from app.resp import decode, encode, encode_simple
 from app.storage import storage
@@ -36,8 +36,7 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         elif command == "SET":
             writer.write(SET(*args).execute())
         elif command == "GET":
-            key, *_ = message.contents[1:]
-            writer.write(encode(storage.get(key)))
+            writer.write(GET(*args).execute())
         elif command == "RPUSH":
             key, *items = message.contents[1:]
             values = storage.get_list(key)

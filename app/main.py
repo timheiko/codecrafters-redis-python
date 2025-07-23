@@ -1,7 +1,10 @@
 import asyncio
+from asyncio import StreamReader, StreamWriter
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import ClassVar, Self
+
+from app.command import PING
 
 from .resp import decode, encode, encode_simple
 from .storage import Storage
@@ -22,12 +25,13 @@ storage = Storage()
 waiting_queue = defaultdict(deque)
 
 
-async def handle_echo(reader, writer):
+async def handle_echo(reader: StreamReader, writer: StreamWriter):
     while len(data := await reader.read(1024)) > 0:
         message = Message.parse(data)
         command = message.contents[0].upper()
+        args = message.contents[1:]
         if command == "PING":
-            writer.write(encode_simple("PONG"))
+            writer.write(PING(args).execute())
         elif command == "ECHO":
             writer.write(encode_simple(" ".join(message.contents[1:])))
         elif command == "SET":
@@ -73,7 +77,6 @@ async def handle_echo(reader, writer):
                 writer.write(encode(values.pop(0)))
             else:
                 popped = values[:number]
-                log("popped", popped)
                 values[:number] = []
                 writer.write(encode(popped))
         elif command == "BLPOP":
@@ -102,7 +105,7 @@ async def main():
     server = await asyncio.start_server(handle_echo, "localhost", 6379)
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
-    print(f"Serving on {addrs}")
+    log(f"Serving on {addrs}")
 
     async with server:
         await server.serve_forever()

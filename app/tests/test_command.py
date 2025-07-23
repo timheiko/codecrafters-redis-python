@@ -1,6 +1,6 @@
 import unittest
 
-from app.command import ECHO, GET, LLEN, LPOP, PING, SET
+from app.command import ECHO, GET, LLEN, LPOP, LRANGE, PING, SET
 
 from app.storage import storage
 
@@ -82,6 +82,14 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(
             LPOP(key, "2").execute(), b"*2\r\n$5\r\napple\r\n$6\r\nbanana\r\n"
         )
+
+    def test_lrange_constractor(self):
+        key, start, end = "my_list", "0", "-1"
+        command = LRANGE(key, start, end)
+
+        self.assertEqual(command.key, key)
+        self.assertEqual(command.start, 0)
+        self.assertEqual(command.end, -1)
 
 
 if __name__ == "__main__":

@@ -47,11 +47,6 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
             values = items[::-1] + values
             storage.set(key, values)
             writer.write(encode(len(values)))
-        elif command == "LRANGE":
-            key, start, end = message.contents[1:]
-            start, end = int(start), int(end)
-            values = storage.get_list(key)
-            writer.write(encode(storage.get_list_range(key, start, end)))
         elif command == "BLPOP":
             key, timeout = message.contents[1], float(message.contents[2])
             values = storage.get_list(key)

@@ -161,3 +161,23 @@ class LPOP(RedisCommand):
         popped = values[: self.count]
         values[: self.count] = []
         return encode(popped)
+
+
+@registry.register
+@dataclass
+class LRANGE(RedisCommand):
+    key: str
+    start: int
+    end: int
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key, start, end]:
+                self.key = key
+                self.start = int(start)
+                self.end = int(end)
+            case _:
+                raise ValueError
+
+    def execute(self):
+        return encode(storage.get_list_range(self.key, self.start, self.end))

@@ -13,6 +13,27 @@ class TestCommand(unittest.TestCase):
     def test_echo(self):
         self.assertEqual(ECHO(*["hello", "world!"]).execute(), b"+hello world!\r\n")
 
+    def test_set_constructor(self):
+        key, value = "foo", "bar"
+        command = SET(key, value)
+        self.assertEqual(command.key, key)
+        self.assertEqual(command.value, value)
+        self.assertEqual(command.ttlms, None)
+
+    def test_set_constructor_ttl_px(self):
+        key, value = "foo", "bar"
+        command = SET(key, value, "px", 2)
+        self.assertEqual(command.key, key)
+        self.assertEqual(command.value, value)
+        self.assertEqual(command.ttlms, 2)
+
+    def test_set_constructor_ttl_ex(self):
+        key, value = "foo", "bar"
+        command = SET(key, value, "ex", 3)
+        self.assertEqual(command.key, key)
+        self.assertEqual(command.value, value)
+        self.assertEqual(command.ttlms, 3_000)
+
     def test_set(self):
         key, value = "foo", "bar"
         self.assertEqual(SET(key, value).execute(), b"+OK\r\n")

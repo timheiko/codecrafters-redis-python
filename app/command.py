@@ -47,14 +47,23 @@ class SET(RedisCommand):
 
     def __init__(self, *args: list[str]):
         match args:
-            case [key, value]:
+            case [key, value, *rest]:
                 self.key = key
                 self.value = value
                 self.ttlms = None
-            case [key, value, ("PX" | "px" | "Px" | "pX"), ttlms]:
-                self.key = key
-                self.value = value
-                self.ttlms = float(ttlms)
+                match rest:
+                    case [unit, ttl]:
+                        match unit.upper():
+                            case "PX":
+                                self.ttlms = float(ttl)
+                            case "EX":
+                                self.ttlms = float(ttl) * 1_000
+                            case _:
+                                raise ValueError(f"Unknown unit: {unit}")
+                    case []:
+                        pass
+                    case _:
+                        raise ValueError(f"Expected [unit, ttl], got {rest}")
             case _:
                 raise ValueError
 

@@ -1,5 +1,5 @@
 import unittest
-from app.resp import encode, encode_simple
+from ..resp import decode_bulk_string, encode, encode_simple
 
 
 class RespTest(unittest.TestCase):
@@ -29,6 +29,12 @@ class RespTest(unittest.TestCase):
 
     def test_encode_array_empty(self):
         self.assertEqual(encode([]), b"*0\r\n")
+
+    def test_decode_bulk_string(self):
+        self.assertEqual(decode_bulk_string(b"$6\r\nfoobar\r\n", 0), ("foobar", 12))
+
+    def test_decode_bulk_string_empty(self):
+        self.assertEqual(decode_bulk_string(b"$0\r\n\r\n", 0), ("", 6))
 
 
 if __name__ == "__main__":

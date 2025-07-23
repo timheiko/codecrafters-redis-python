@@ -38,3 +38,15 @@ def encode_simple(data: str) -> bytes:
         return b"+" + data.encode() + LINE_SEPARATOR
     else:
         raise Exception(f"Unsupported encoding data type: {type(data)}: {data}")
+
+
+def decode_bulk_string(payload: bytes, offset: int) -> tuple[bytes, int]:
+    if payload[offset : offset + 1] == "$".encode():
+        new_line_sep_pos = payload.find(LINE_SEPARATOR, offset + 1)
+        length = int(payload[offset + 1 : new_line_sep_pos])
+        text_start = new_line_sep_pos + len(LINE_SEPARATOR)
+        text_end = text_start + length
+        text = payload[text_start:text_end].decode()
+        return (text, text_end + len(LINE_SEPARATOR))
+
+    raise Exception(f"Cannot parse text from payload at offset {offset}: {payload}")

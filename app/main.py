@@ -1,15 +1,11 @@
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
-import queue
-import socket  # noqa: F401
 import sys
-import threading
 from typing import ClassVar, Self
-from datetime import datetime, timedelta
 
-from app.resp import encode, encode_simple
-from app.storage import Storage
+from .resp import decode_bulk_string, encode, encode_simple
+from .storage import Storage
 
 
 def log(*args: list[any]) -> None:
@@ -33,24 +29,12 @@ class Message:
                 i = new_line_sep_pos + len(Message.SEPARATOR)
                 for _ in range(length):
                     if payload[i : i + 1] == b"$":
-                        text, i = Message.parse_text(payload, i)
+                        text, i = decode_bulk_string(payload, i)
                         contents.append(text)
             else:
                 raise Exception(f"Unknown data type: {chr(payload[i])}")
 
         return Message(contents=contents)
-
-    @staticmethod
-    def parse_text(payload: bytes, offset: int) -> tuple[bytes, int]:
-        if payload[offset : offset + 1] == "$".encode():
-            new_line_sep_pos = payload.find(Message.SEPARATOR, offset + 1)
-            length = int(payload[offset + 1 : new_line_sep_pos])
-            text_start = new_line_sep_pos + len(Message.SEPARATOR)
-            text_end = text_start + length
-            text = payload[text_start:text_end].decode()
-            return (text, text_end + len(Message.SEPARATOR))
-
-        raise Exception(f"Cannot parse text from payload: {payload}")
 
 
 storage = Storage()

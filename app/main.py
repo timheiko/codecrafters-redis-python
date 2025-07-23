@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from app.command import PING
+from app.command import ECHO, PING
 
 from .resp import decode, encode, encode_simple
 from .storage import Storage
@@ -31,9 +31,9 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         command = message.contents[0].upper()
         args = message.contents[1:]
         if command == "PING":
-            writer.write(PING(args).execute())
+            writer.write(PING(*args).execute())
         elif command == "ECHO":
-            writer.write(encode_simple(" ".join(message.contents[1:])))
+            writer.write(ECHO(*args).execute())
         elif command == "SET":
             key, value, *rest = message.contents[1:]
             if len(rest) > 0:

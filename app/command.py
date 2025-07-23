@@ -94,3 +94,30 @@ class LLEN(RedisCommand):
 
     def execute(self):
         return encode(len(storage.get_list(self.key)))
+
+
+@dataclass
+class LPOP(RedisCommand):
+    key: str
+    count: int
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key]:
+                self.key = key
+                self.count = 1
+            case [key, count, *_]:
+                self.key = key
+                self.count = int(count)
+            case _:
+                raise ValueError
+
+    def execute(self):
+        values = storage.get_list(self.key)
+        if not values:
+            return encode(None)
+        elif self.count == 1:
+            return encode(values.pop(0))
+        popped = values[: self.count]
+        values[: self.count] = []
+        return encode(popped)

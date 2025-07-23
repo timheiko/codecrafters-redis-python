@@ -1,6 +1,6 @@
 import unittest
 
-from app.command import ECHO, GET, LLEN, PING, SET
+from app.command import ECHO, GET, LLEN, LPOP, PING, SET
 
 from app.storage import storage
 
@@ -45,6 +45,22 @@ class TestCommand(unittest.TestCase):
     def test_llen_exists(self):
         key = "vegetables"
         self.assertEqual(LLEN(key).execute(), b":0\r\n")
+
+    def test_lpop_exists(self):
+        key, values = "fruit lpop", "apple banana strawberry".split()
+        storage.set(key, values)
+        self.assertEqual(LPOP(key).execute(), b"$5\r\napple\r\n")
+
+    def test_lpop_does_not_exist(self):
+        key = "fruit lpop does not exit"
+        self.assertEqual(LPOP(key).execute(), b"$-1\r\n")
+
+    def test_lpop_many_exists(self):
+        key, values = "fruit lpop many", "apple banana strawberry".split()
+        storage.set(key, values)
+        self.assertEqual(
+            LPOP(key, "2").execute(), b"*2\r\n$5\r\napple\r\n$6\r\nbanana\r\n"
+        )
 
 
 if __name__ == "__main__":

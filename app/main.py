@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from app.command import ECHO, GET, PING, SET
+from app.command import ECHO, GET, LLEN, PING, SET
 
 from app.resp import decode, encode, encode_simple
 from app.storage import storage
@@ -58,8 +58,7 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
             values = storage.get_list(key)
             writer.write(encode(storage.get_list_range(key, start, end)))
         elif command == "LLEN":
-            values = storage.get_list(message.contents[1])
-            writer.write(encode(len(values)))
+            writer.write(LLEN(*args).execute())
         elif command == "LPOP":
             values = storage.get_list(message.contents[1])
             number = 1 if len(message.contents) < 3 else int(message.contents[2])

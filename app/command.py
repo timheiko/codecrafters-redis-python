@@ -79,3 +79,18 @@ class GET(RedisCommand):
 
     def execute(self):
         return encode(storage.get(self.key))
+
+
+@dataclass
+class LLEN(RedisCommand):
+    key: str
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key, *_]:
+                self.key = key
+            case _:
+                raise ValueError
+
+    def execute(self):
+        return encode(len(storage.get_list(self.key)))

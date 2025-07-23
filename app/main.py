@@ -4,11 +4,11 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from app.command import ECHO, PING
+from app.command import ECHO, PING, SET
 
-from .resp import decode, encode, encode_simple
-from .storage import Storage
-from .log import log
+from app.resp import decode, encode, encode_simple
+from app.storage import storage
+from app.log import log
 
 
 @dataclass
@@ -21,7 +21,6 @@ class Message:
         return Message(contents=decode(payload))
 
 
-storage = Storage()
 waiting_queue = defaultdict(deque)
 
 
@@ -35,13 +34,7 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         elif command == "ECHO":
             writer.write(ECHO(*args).execute())
         elif command == "SET":
-            key, value, *rest = message.contents[1:]
-            if len(rest) > 0:
-                _exp_command, duration = rest[0].upper(), int(rest[1])
-                storage.set(key, value, duration)
-            else:
-                storage.set(key, value)
-            writer.write(encode_simple("OK"))
+            writer.write(SET(*args).execute())
         elif command == "GET":
             key, *_ = message.contents[1:]
             writer.write(encode(storage.get(key)))

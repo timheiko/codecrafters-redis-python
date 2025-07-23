@@ -30,3 +30,6 @@ class Storage:
         start = start if start >= 0 else max(0, n + start)
         end = (end if end >= 0 else max(0, n + end)) + 1
         return values[start:end]
+
+
+storage = Storage()

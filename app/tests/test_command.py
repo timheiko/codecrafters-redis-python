@@ -1,6 +1,8 @@
 import unittest
 
-from app.command import ECHO, PING
+from app.command import ECHO, PING, SET
+
+from app.storage import storage
 
 
 class TestCommand(unittest.TestCase):
@@ -10,6 +12,21 @@ class TestCommand(unittest.TestCase):
 
     def test_echo(self):
         self.assertEqual(ECHO(*["hello", "world!"]).execute(), b"+hello world!\r\n")
+
+    def test_set(self):
+        key, value = "foo", "bar"
+        self.assertEqual(SET(key, value).execute(), b"+OK\r\n")
+        self.assertEqual(storage.get(key), value)
+
+    def test_set_zero_px_ttl(self):
+        key, value = "foo", "bar"
+        self.assertEqual(SET(key, value, "px", "0").execute(), b"+OK\r\n")
+        self.assertIsNone(storage.get(key))
+
+    def test_set_long_px_ttl(self):
+        key, value = "foo", "bar"
+        self.assertEqual(SET(key, value, "px", "10").execute(), b"+OK\r\n")
+        self.assertEqual(storage.get(key), value)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,31 @@ from app.resp import encode, encode_simple
 from app.storage import storage
 
 
+class CommandRegistry:
+    def __init__(self):
+        self.__registry = {}
+
+    def register(self, cls):
+        if not issubclass(cls, RedisCommand):
+            raise ValueError(f"{cls} does not subclass {RedisCommand}")
+
+        cls_name = cls.__name__
+        if cls_name in self:
+            raise KeyError(f"Already registered <{cls_name}>")
+
+        self.__registry[cls_name] = cls
+        return cls
+
+    def __getitem__(self, key):
+        return self.__registry[key]
+
+    def __contains__(self, key):
+        return key in self.__registry
+
+
+registry = CommandRegistry()
+
+
 class RedisCommand(ABC):
     @abstractmethod
     def __init__(self, args: list[str]):
@@ -20,6 +45,7 @@ class RedisCommand(ABC):
         """
 
 
+@registry.register
 class PING(RedisCommand):
     def __init__(self, *_args: list[str]):
         pass
@@ -28,6 +54,7 @@ class PING(RedisCommand):
         return encode_simple("PONG")
 
 
+@registry.register
 @dataclass
 class ECHO(RedisCommand):
     args = list[str]
@@ -39,6 +66,7 @@ class ECHO(RedisCommand):
         return encode_simple(" ".join(self.args))
 
 
+@registry.register
 @dataclass
 class SET(RedisCommand):
     key: str
@@ -75,6 +103,7 @@ class SET(RedisCommand):
         return encode_simple("OK")
 
 
+@registry.register
 @dataclass
 class GET(RedisCommand):
     key: str
@@ -90,6 +119,7 @@ class GET(RedisCommand):
         return encode(storage.get(self.key))
 
 
+@registry.register
 @dataclass
 class LLEN(RedisCommand):
     key: str
@@ -105,6 +135,7 @@ class LLEN(RedisCommand):
         return encode(len(storage.get_list(self.key)))
 
 
+@registry.register
 @dataclass
 class LPOP(RedisCommand):
     key: str

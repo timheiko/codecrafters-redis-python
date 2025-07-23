@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from app.command import ECHO, GET, LLEN, LPOP, PING, SET
+from app.command import registry, ECHO, GET, LLEN, LPOP, PING, SET
 
 from app.resp import decode, encode, encode_simple
 from app.storage import storage
@@ -29,14 +29,9 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         message = Message.parse(data)
         command = message.contents[0].upper()
         args = message.contents[1:]
-        if command == "PING":
-            writer.write(PING(*args).execute())
-        elif command == "ECHO":
-            writer.write(ECHO(*args).execute())
-        elif command == "SET":
-            writer.write(SET(*args).execute())
-        elif command == "GET":
-            writer.write(GET(*args).execute())
+        if command in registry:
+            cmd = registry[command](*args)
+            writer.write(cmd.execute())
         elif command == "RPUSH":
             key, *items = message.contents[1:]
             values = storage.get_list(key)
@@ -57,10 +52,6 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
             start, end = int(start), int(end)
             values = storage.get_list(key)
             writer.write(encode(storage.get_list_range(key, start, end)))
-        elif command == "LLEN":
-            writer.write(LLEN(*args).execute())
-        elif command == "LPOP":
-            writer.write(LPOP(*args).execute())
         elif command == "BLPOP":
             key, timeout = message.contents[1], float(message.contents[2])
             values = storage.get_list(key)

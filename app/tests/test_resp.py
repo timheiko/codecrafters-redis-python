@@ -1,5 +1,5 @@
 import unittest
-from ..resp import decode_bulk_string, encode, encode_simple
+from ..resp import decode, decode_bulk_string, encode, encode_simple
 
 
 class RespTest(unittest.TestCase):
@@ -35,6 +35,14 @@ class RespTest(unittest.TestCase):
 
     def test_decode_bulk_string_empty(self):
         self.assertEqual(decode_bulk_string(b"$0\r\n\r\n", 0), ("", 6))
+
+    def test_decode_list(self):
+        self.assertEqual(
+            decode(
+                b"*7\r\n$5\r\nRPUSH\r\n$9\r\nlist_key2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n"
+            ),
+            ["RPUSH", "list_key2", "a", "b", "c", "d", "e"],
+        )
 
 
 if __name__ == "__main__":

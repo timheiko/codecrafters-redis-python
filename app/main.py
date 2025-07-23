@@ -1,15 +1,11 @@
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
-import sys
 from typing import ClassVar, Self
 
-from .resp import decode_bulk_string, encode, encode_simple
+from .resp import decode, encode, encode_simple
 from .storage import Storage
-
-
-def log(*args: list[any]) -> None:
-    print(*args, file=sys.stderr)
+from .log import log
 
 
 @dataclass
@@ -19,22 +15,7 @@ class Message:
 
     @staticmethod
     def parse(payload: bytes) -> Self:
-        log("payload <<< ", payload)
-        n, i = len(payload), 0
-        contents = []
-        while i < n:
-            if payload[i : i + 1] == b"*":
-                new_line_sep_pos = payload.find(Message.SEPARATOR, i + 1)
-                length = int(payload[i + 1 : new_line_sep_pos].decode())
-                i = new_line_sep_pos + len(Message.SEPARATOR)
-                for _ in range(length):
-                    if payload[i : i + 1] == b"$":
-                        text, i = decode_bulk_string(payload, i)
-                        contents.append(text)
-            else:
-                raise Exception(f"Unknown data type: {chr(payload[i])}")
-
-        return Message(contents=contents)
+        return Message(contents=decode(payload))
 
 
 storage = Storage()

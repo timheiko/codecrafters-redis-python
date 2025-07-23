@@ -1,3 +1,5 @@
+from .log import log
+
 LINE_SEPARATOR = b"\r\n"
 
 
@@ -38,6 +40,25 @@ def encode_simple(data: str) -> bytes:
         return b"+" + data.encode() + LINE_SEPARATOR
     else:
         raise Exception(f"Unsupported encoding data type: {type(data)}: {data}")
+
+
+def decode(payload: bytes):
+    log("payload <<<", payload)
+    n, i = len(payload), 0
+    contents = []
+    while i < n:
+        if payload[i : i + 1] == b"*":
+            new_line_sep_pos = payload.find(LINE_SEPARATOR, i + 1)
+            length = int(payload[i + 1 : new_line_sep_pos].decode())
+            i = new_line_sep_pos + len(LINE_SEPARATOR)
+            for _ in range(length):
+                if payload[i : i + 1] == b"$":
+                    text, i = decode_bulk_string(payload, i)
+                    contents.append(text)
+        else:
+            raise Exception(f"Unknown data type: {chr(payload[i])}")
+
+    return contents
 
 
 def decode_bulk_string(payload: bytes, offset: int) -> tuple[bytes, int]:

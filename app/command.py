@@ -268,3 +268,27 @@ class BLPOP(RedisCommand):
                 return encode([self.key, storage.get_list(self.key).pop(0)])
             except TimeoutError:
                 return encode(None)
+
+
+@registry.register
+@dataclass
+class TYPE(RedisCommand):
+    key: str
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key]:
+                self.key = key
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        match storage.get(self.key):
+            case None:
+                return encode_simple("none")
+            case str(_):
+                return encode_simple("string")
+            case [*_values]:
+                return encode_simple("list")
+            case _:
+                raise ValueError

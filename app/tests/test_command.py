@@ -12,6 +12,7 @@ from app.command import (
     PING,
     RPUSH,
     SET,
+    TYPE,
     CommandRegistry,
 )
 
@@ -181,6 +182,23 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             blpop.result(), b"*2\r\n$19\r\nmy_list_blpop_lpush\r\n$4\r\npear\r\n"
         )
+
+    async def test_type_missing(self):
+        self.assertEqual(await TYPE("missing_key").execute(), b"+none\r\n")
+
+    async def test_type_list(self):
+        key, value = "orange", "ready"
+
+        await RPUSH(key, value).execute()
+
+        self.assertEqual(await TYPE(key).execute(), b"+list\r\n")
+
+    async def test_type_string(self):
+        key, value = "orange", "ready"
+
+        await SET(key, value).execute()
+
+        self.assertEqual(await TYPE(key).execute(), b"+string\r\n")
 
 
 if __name__ == "__main__":

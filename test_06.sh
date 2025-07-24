@@ -35,3 +35,10 @@ redis-cli LLEN list_key2
 redis-cli BLPOP list_key2 0
 redis-cli BLPOP list_key3 0 &
 redis-cli RPUSH list_key3 "foo"
+
+
+redis-cli SET string_key hello
+redis-cli TYPE string_key
+redis-cli TYPE missing_key
+redis-cli RPUSH list_key a b c
+redis-cli Type list_key

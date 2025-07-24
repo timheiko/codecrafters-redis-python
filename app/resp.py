@@ -27,6 +27,8 @@ def encode(data: any) -> bytes:
             + LINE_SEPARATOR
             + b"".join(encode(item) for item in data)
         )
+    elif isinstance(data, ValueError):
+        return f"-ERR {" ".join(data.args)}".encode() + LINE_SEPARATOR
     else:
         raise Exception(f"Unsupported encoding data type: {type(data)}: {data}")
 

@@ -30,6 +30,9 @@ class RespTest(unittest.TestCase):
     def test_encode_array_empty(self):
         self.assertEqual(encode([]), b"*0\r\n")
 
+    def test_encode_error(self):
+        self.assertEqual(encode(ValueError("Bang!")), b"-ERR Bang!\r\n")
+
     def test_decode_bulk_string(self):
         self.assertEqual(decode_bulk_string(b"$6\r\nfoobar\r\n", 0), ("foobar", 12))
 

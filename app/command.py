@@ -6,7 +6,7 @@ import itertools
 
 from app.resp import encode, encode_simple
 
-from app.storage import Stream, storage
+from app.storage import Stream, StreamEntry, storage
 
 
 class CommandRegistry:
@@ -302,14 +302,14 @@ class TYPE(RedisCommand):
 class XADD(RedisCommand):
     key: str
     idx: str
-    payload: tuple[tuple[str, str]]
+    field_values: tuple[tuple[str, str]]
 
     def __init__(self, *args: list[str]):
         match args:
             case [key, idx, *field_vals]:
                 self.key = key
                 self.idx = idx
-                self.payload = tuple(
+                self.field_values = tuple(
                     (field, value)
                     for field, value in itertools.batched(field_vals, 2, strict=True)
                 )
@@ -317,5 +317,10 @@ class XADD(RedisCommand):
                 raise ValueError
 
     async def execute(self):
-        storage.set(self.key, Stream())
-        return encode(self.idx)
+        stream = storage.get_stream(self.key)
+        try:
+            stream.append(StreamEntry(idx=self.idx, field_values=self.field_values))
+            storage.set(self.key, stream)
+            return encode(self.idx)
+        except ValueError as error:
+            return encode(error)

@@ -1,6 +1,6 @@
 import unittest
 
-from app.storage import Storage
+from app.storage import Storage, Stream, StreamEntry
 
 
 class TestStorage(unittest.TestCase):
@@ -88,3 +88,39 @@ class TestStorage(unittest.TestCase):
 
     def test_get_list_missing(self):
         self.assertEqual(self.storage.get_list("my_list"), [])
+
+    def test_storage_stream_add_valid(self):
+        stream = Stream()
+
+        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+
+        self.assertEqual(len(stream), 1)
+
+    def test_storage_stream_add_valid_multiple_different_ms(self):
+        stream = Stream()
+
+        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="1-1", field_values=(("bar", "baz"))))
+
+        self.assertEqual(len(stream), 2)
+
+    def test_storage_stream_add_valid_multiple_same_ms(self):
+        stream = Stream()
+
+        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="0-2", field_values=(("bar", "baz"))))
+
+        self.assertEqual(len(stream), 2)
+
+    @unittest.expectedFailure
+    def test_storage_stream_add_invalid(self):
+        stream = Stream()
+
+        stream.append(StreamEntry(idx="0-0", field_values=(("foo", "bar"))))
+
+    @unittest.expectedFailure
+    def test_storage_stream_add_invalid_multiple_same_idx(self):
+        stream = Stream()
+
+        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))

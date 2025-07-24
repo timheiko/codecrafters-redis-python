@@ -5,8 +5,30 @@ from typing import Optional
 
 
 @dataclass
+class StreamEntry:
+    idx: str
+    field_values: tuple[tuple[str, str]]
+
+
+@dataclass
 class Stream:
-    pass
+    entries: list[StreamEntry]
+
+    def __init__(self, *entries: list[StreamEntry]):
+        self.entries = list(entries)
+
+    def append(self, entry: StreamEntry) -> None:
+        if entry.idx <= "0-0":
+            raise ValueError("The ID specified in XADD must be greater than 0-0")
+        if self.entries and self.entries[-1].idx >= entry.idx:
+            raise ValueError(
+                "The ID specified in XADD is equal or smaller than the target stream top item"
+            )
+
+        self.entries.append(entry)
+
+    def __len__(self):
+        return len(self.entries)
 
 
 class Storage:
@@ -41,7 +63,7 @@ class Storage:
         self.__storage = {}
 
     def get_stream(self, key: str) -> Stream:
-        self.__storage.get(key) or Stream()
+        return self.get(key) or Stream()
 
 
 storage = Storage()

@@ -217,7 +217,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(cmd.key, key)
         self.assertEqual(cmd.idx, idx)
-        self.assertEqual(cmd.payload, (("temperature", "36"), ("humidity", "95")))
+        self.assertEqual(cmd.field_values, (("temperature", "36"), ("humidity", "95")))
 
     @unittest.expectedFailure
     async def test_xadd_construtor_odd_field_values(self):
@@ -232,9 +232,52 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             "stream_key 1526919030474-0 temperature 36 humidity 95".split()
         )
 
-        await XADD(key, idx, *field_values).execute()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$15\r\n1526919030474-0\r\n"
+        )
 
-        self.assertEqual(storage.get(key), Stream())
+        self.assertIsNotNone(storage.get(key))
+
+    async def test_xadd_execute_sequence(self):
+        key, idx, *field_values = "stream_key 1-1 foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+        )
+        key, idx, *field_values = "stream_key 1-2 bar baz".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-2\r\n"
+        )
+
+        self.assertEqual(len(storage.get(key)), 2)
+
+    async def test_xadd_execute_invalid_idx(self):
+        key, idx, *field_values = "stream_key 0-0 foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(),
+            b"-ERR The ID specified in XADD must be greater than 0-0\r\n",
+        )
+
+    async def test_xadd_execute_invalid_duplicated_idx(self):
+        key, idx, *field_values = "stream_key 1-1 foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+        )
+        key, idx, *field_values = "stream_key 1-1 bar baz".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(),
+            b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n",
+        )
+
+    async def test_xadd_execute_invalid_smaler_idx(self):
+        key, idx, *field_values = "stream_key 1-1 foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+        )
+        key, idx, *field_values = "stream_key 0-1 bar baz".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(),
+            b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n",
+        )
 
 
 if __name__ == "__main__":

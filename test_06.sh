@@ -46,3 +46,8 @@ redis-cli Type list_key
 
 redis-cli XADD stream_key 1526919030474-0 temperature 36 humidity 95
 redis-cli Type stream_key
+
+redis-cli XADD stream_key2 0-0 temperature 36 humidity 95
+redis-cli XADD stream_key2 1-0 temperature 36 humidity 95
+redis-cli XADD stream_key2 1-0 temperature 36 humidity 95
+redis-cli XADD stream_key2 0-1 temperature 36 humidity 95

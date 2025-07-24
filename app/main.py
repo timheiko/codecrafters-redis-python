@@ -1,6 +1,5 @@
 import asyncio
 from asyncio import StreamReader, StreamWriter
-from dataclasses import dataclass
 
 from app.command import registry
 
@@ -11,6 +10,7 @@ from app.log import log
 async def handle_echo(reader: StreamReader, writer: StreamWriter):
     while len(data := await reader.read(1024)) > 0:
         command, *args = decode(data)
+        log(f"command {command} args: {args}")
         writer.write(await registry.execute(command, *args))
 
     await writer.drain()

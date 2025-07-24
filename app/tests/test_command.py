@@ -1,11 +1,36 @@
 import unittest
 
-from app.command import BLPOP, ECHO, GET, LLEN, LPOP, LPUSH, LRANGE, PING, RPUSH, SET
+from app.command import (
+    BLPOP,
+    ECHO,
+    GET,
+    LLEN,
+    LPOP,
+    LPUSH,
+    LRANGE,
+    PING,
+    RPUSH,
+    SET,
+    CommandRegistry,
+)
 
 from app.storage import storage
 
 
 class TestCommand(unittest.IsolatedAsyncioTestCase):
+
+    def test_registry_register(self):
+        registry = CommandRegistry()
+        registry.register(SET)
+        self.assertIn("SET", registry)
+        self.assertEqual(registry["SET"], SET)
+
+    @unittest.expectedFailure
+    def test_registry_register_duplicate(self):
+        registry = CommandRegistry()
+        registry.register(GET)
+
+        registry.register(GET)
 
     async def test_ping(self):
         self.assertEqual(await PING().execute(), b"+PONG\r\n")

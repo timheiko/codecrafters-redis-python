@@ -15,6 +15,7 @@ from app.command import (
     TYPE,
     XADD,
     XRANGE,
+    XREAD,
     CommandRegistry,
 )
 
@@ -368,6 +369,18 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_xrange_empty(self):
         encoded = await XRANGE(*"stream_key_xrange 0-2 0-3".split()).execute()
         self.assertEqual(encoded, b"*0\r\n")
+
+    async def test_xread(self):
+        await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
+        await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
+        await XADD(*"stream_key_xrange 0-3 baz foo".split()).execute()
+
+        encoded = await XREAD(*"streams stream_key_xrange 0-0".split()).execute()
+
+        self.assertEqual(
+            encoded,
+            b"*1\r\n*2\r\n$17\r\nstream_key_xrange\r\n*3\r\n*2\r\n$3\r\n0-1\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
+        )
 
 
 if __name__ == "__main__":

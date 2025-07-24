@@ -358,3 +358,31 @@ class XRANGE(RedisCommand):
             if self.start <= entry.idx <= self.end
         ]
         return encode(entries)
+
+
+@registry.register
+@dataclass
+class XREAD(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/xread/
+    """
+
+    key: str
+    start: str
+
+    def __init__(self, *args):
+        match args:
+            case [_streams, key, start]:
+                self.key = key
+                self.start = start
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        stream: Stream = storage.get_stream(self.key)
+        entries = [
+            [entry.idx, list(itertools.chain.from_iterable(entry.field_values))]
+            for entry in stream.entries
+            if self.start < entry.idx
+        ]
+        return encode([[self.key, entries]])

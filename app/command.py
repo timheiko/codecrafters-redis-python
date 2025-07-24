@@ -208,3 +208,27 @@ class RPUSH(RedisCommand):
             if len(waiting_queue[self.key]) > 0:
                 waiting_queue[self.key].popleft().set_result(True)
         return encode(len(values))
+
+
+@registry.register
+@dataclass
+class LPUSH(RedisCommand):
+    key: str
+    items: list[str]
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key, *items]:
+                self.key = key
+                self.items = items
+            case _:
+                raise ValueError
+
+    def execute(self):
+        values = storage.get_list(self.key)
+        values = self.items[::-1] + values
+        storage.set(self.key, values)
+        for _ in self.items:
+            if len(waiting_queue[self.key]) > 0:
+                waiting_queue[self.key].popleft().set_result(True)
+        return encode(len(values))

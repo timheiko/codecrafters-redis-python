@@ -29,12 +29,6 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         if command in registry:
             cmd = registry[command](*args)
             writer.write(cmd.execute())
-        elif command == "LPUSH":
-            key, *items = message.contents[1:]
-            values = storage.get_list(key)
-            values = items[::-1] + values
-            storage.set(key, values)
-            writer.write(encode(len(values)))
         elif command == "BLPOP":
             key, timeout = message.contents[1], float(message.contents[2])
             values = storage.get_list(key)

@@ -28,21 +28,7 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         args = message.contents[1:]
         if command in registry:
             cmd = registry[command](*args)
-            writer.write(cmd.execute())
-        elif command == "BLPOP":
-            key, timeout = message.contents[1], float(message.contents[2])
-            values = storage.get_list(key)
-            if values:
-                writer.write(encode([key, values.pop(0)]))
-            else:
-                loop = asyncio.get_event_loop()
-                future = loop.create_future()
-                waiting_queue[key].append(future)
-                try:
-                    _ = await asyncio.wait_for(future, timeout if timeout > 0 else None)
-                    writer.write(encode([key, storage.get_list(key).pop(0)]))
-                except TimeoutError:
-                    writer.write(encode(None))
+            writer.write(await cmd.execute())
         else:
             raise Exception(f"Unknown command: {data}")
 

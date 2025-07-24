@@ -1,89 +1,89 @@
 import unittest
 
-from app.command import ECHO, GET, LLEN, LPOP, LPUSH, LRANGE, PING, RPUSH, SET
+from app.command import BLPOP, ECHO, GET, LLEN, LPOP, LPUSH, LRANGE, PING, RPUSH, SET
 
 from app.storage import storage
 
 
-class TestCommand(unittest.TestCase):
+class TestCommand(unittest.IsolatedAsyncioTestCase):
 
-    def test_ping(self):
-        self.assertEqual(PING(*[]).execute(), b"+PONG\r\n")
+    async def test_ping(self):
+        self.assertEqual(await PING().execute(), b"+PONG\r\n")
 
-    def test_echo(self):
-        self.assertEqual(ECHO(*["hello", "world!"]).execute(), b"+hello world!\r\n")
+    async def test_echo(self):
+        self.assertEqual(await ECHO("hello", "world!").execute(), b"+hello world!\r\n")
 
-    def test_set_constructor(self):
+    async def test_set_constructor(self):
         key, value = "foo", "bar"
         command = SET(key, value)
         self.assertEqual(command.key, key)
         self.assertEqual(command.value, value)
         self.assertEqual(command.ttlms, None)
 
-    def test_set_constructor_ttl_px(self):
+    async def test_set_constructor_ttl_px(self):
         key, value = "foo", "bar"
         command = SET(key, value, "px", 2)
         self.assertEqual(command.key, key)
         self.assertEqual(command.value, value)
         self.assertEqual(command.ttlms, 2)
 
-    def test_set_constructor_ttl_ex(self):
+    async def test_set_constructor_ttl_ex(self):
         key, value = "foo", "bar"
         command = SET(key, value, "ex", 3)
         self.assertEqual(command.key, key)
         self.assertEqual(command.value, value)
         self.assertEqual(command.ttlms, 3_000)
 
-    def test_set(self):
+    async def test_set(self):
         key, value = "foo", "bar"
-        self.assertEqual(SET(key, value).execute(), b"+OK\r\n")
+        self.assertEqual(await SET(key, value).execute(), b"+OK\r\n")
         self.assertEqual(storage.get(key), value)
 
-    def test_set_zero_px_ttl(self):
+    async def test_set_zero_px_ttl(self):
         key, value = "foo", "bar"
-        self.assertEqual(SET(key, value, "px", "0").execute(), b"+OK\r\n")
+        self.assertEqual(await SET(key, value, "px", "0").execute(), b"+OK\r\n")
         self.assertIsNone(storage.get(key))
 
-    def test_set_long_px_ttl(self):
+    async def test_set_long_px_ttl(self):
         key, value = "foo", "bar"
-        self.assertEqual(SET(key, value, "px", "10").execute(), b"+OK\r\n")
+        self.assertEqual(await SET(key, value, "px", "10").execute(), b"+OK\r\n")
         self.assertEqual(storage.get(key), value)
 
-    def test_get_exists(self):
+    async def test_get_exists(self):
         key, value = "foo", "bar"
         storage.set(key, value)
-        self.assertEqual(GET(key).execute(), b"$3\r\nbar\r\n")
+        self.assertEqual(await GET(key).execute(), b"$3\r\nbar\r\n")
 
-    def test_get_does_not_exist(self):
+    async def test_get_does_not_exist(self):
         key = "foo"
-        self.assertEqual(GET(key).execute(), b"$-1\r\n")
+        self.assertEqual(await GET(key).execute(), b"$-1\r\n")
 
-    def test_llen_exists(self):
+    async def test_llen_exists(self):
         key, values = "fruit", "apple banana strawberry".split()
         storage.set(key, values)
-        self.assertEqual(LLEN(key).execute(), f":{len(values)}\r\n".encode())
+        self.assertEqual(await LLEN(key).execute(), f":{len(values)}\r\n".encode())
 
-    def test_llen_exists(self):
+    async def test_llen_exists(self):
         key = "vegetables"
-        self.assertEqual(LLEN(key).execute(), b":0\r\n")
+        self.assertEqual(await LLEN(key).execute(), b":0\r\n")
 
-    def test_lpop_exists(self):
+    async def test_lpop_exists(self):
         key, values = "fruit lpop", "apple banana strawberry".split()
         storage.set(key, values)
-        self.assertEqual(LPOP(key).execute(), b"$5\r\napple\r\n")
+        self.assertEqual(await LPOP(key).execute(), b"$5\r\napple\r\n")
 
-    def test_lpop_does_not_exist(self):
+    async def test_lpop_does_not_exist(self):
         key = "fruit lpop does not exit"
-        self.assertEqual(LPOP(key).execute(), b"$-1\r\n")
+        self.assertEqual(await LPOP(key).execute(), b"$-1\r\n")
 
-    def test_lpop_many_exists(self):
+    async def test_lpop_many_exists(self):
         key, values = "fruit lpop many", "apple banana strawberry".split()
         storage.set(key, values)
         self.assertEqual(
-            LPOP(key, "2").execute(), b"*2\r\n$5\r\napple\r\n$6\r\nbanana\r\n"
+            await LPOP(key, "2").execute(), b"*2\r\n$5\r\napple\r\n$6\r\nbanana\r\n"
         )
 
-    def test_lrange_constractor(self):
+    async def test_lrange_constractor(self):
         key, start, end = "my_list", "0", "-1"
         command = LRANGE(key, start, end)
 
@@ -91,19 +91,33 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(command.start, 0)
         self.assertEqual(command.end, -1)
 
-    def test_rpush_constractor(self):
+    async def test_rpush_constractor(self):
         key, *items = ["my_list_rpush", "stone", "paper", "scissors"]
         command = RPUSH(key, *items)
 
         self.assertEqual(command.key, key)
         self.assertEqual(command.items, ["stone", "paper", "scissors"])
 
-    def test_lpush_constractor(self):
+    async def test_lpush_constractor(self):
         key, *items = ["my_list_lpush", "Friede", "Freude", "Eierkuchen"]
         command = LPUSH(key, *items)
 
         self.assertEqual(command.key, key)
         self.assertEqual(command.items, ["Friede", "Freude", "Eierkuchen"])
+
+    async def test_blpop_constractor_zero_timeout(self):
+        key, timeout = "my_list_blpop", "0"
+        command = BLPOP(key, timeout)
+
+        self.assertEqual(command.key, key)
+        self.assertEqual(command.timeout, None)
+
+    async def test_blpop_constractor_non_zero_timeout(self):
+        key, timeout = "my_list_blpop", "0.5"
+        command = BLPOP(key, timeout)
+
+        self.assertEqual(command.key, key)
+        self.assertEqual(command.timeout, 0.5)
 
 
 if __name__ == "__main__":

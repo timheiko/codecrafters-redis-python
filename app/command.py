@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
 
@@ -42,7 +43,7 @@ class RedisCommand(ABC):
         """
 
     @abstractmethod
-    def execute(self) -> bytes:
+    async def execute(self) -> bytes:
         """
         Executes the command and returns bytes to be sent to client
         """
@@ -53,7 +54,7 @@ class PING(RedisCommand):
     def __init__(self, *_args: list[str]):
         pass
 
-    def execute(self):
+    async def execute(self):
         return encode_simple("PONG")
 
 
@@ -65,7 +66,7 @@ class ECHO(RedisCommand):
     def __init__(self, *args: list[str]):
         self.args = list(args)
 
-    def execute(self):
+    async def execute(self):
         return encode_simple(" ".join(self.args))
 
 
@@ -98,7 +99,7 @@ class SET(RedisCommand):
             case _:
                 raise ValueError
 
-    def execute(self):
+    async def execute(self):
         if self.ttlms is not None:
             storage.set(self.key, self.value, self.ttlms)
         else:
@@ -118,7 +119,7 @@ class GET(RedisCommand):
             case _:
                 raise ValueError
 
-    def execute(self):
+    async def execute(self):
         return encode(storage.get(self.key))
 
 
@@ -134,7 +135,7 @@ class LLEN(RedisCommand):
             case _:
                 raise ValueError
 
-    def execute(self):
+    async def execute(self):
         return encode(len(storage.get_list(self.key)))
 
 
@@ -155,7 +156,7 @@ class LPOP(RedisCommand):
             case _:
                 raise ValueError
 
-    def execute(self):
+    async def execute(self):
         values = storage.get_list(self.key)
         if not values:
             return encode(None)
@@ -182,7 +183,7 @@ class LRANGE(RedisCommand):
             case _:
                 raise ValueError
 
-    def execute(self):
+    async def execute(self):
         return encode(storage.get_list_range(self.key, self.start, self.end))
 
 
@@ -200,7 +201,7 @@ class RPUSH(RedisCommand):
             case _:
                 raise ValueError
 
-    def execute(self):
+    async def execute(self):
         values = storage.get_list(self.key)
         values.extend(self.items)
         storage.set(self.key, values)
@@ -224,7 +225,7 @@ class LPUSH(RedisCommand):
             case _:
                 raise ValueError
 
-    def execute(self):
+    async def execute(self):
         values = storage.get_list(self.key)
         values = self.items[::-1] + values
         storage.set(self.key, values)
@@ -232,3 +233,32 @@ class LPUSH(RedisCommand):
             if len(waiting_queue[self.key]) > 0:
                 waiting_queue[self.key].popleft().set_result(True)
         return encode(len(values))
+
+
+@registry.register
+@dataclass
+class BLPOP(RedisCommand):
+    key: str
+    timeout: float | None
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key, timeout]:
+                self.key = key
+                self.timeout = float(timeout) if float(timeout) > 0 else None
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        values = storage.get_list(self.key)
+        if values:
+            return encode([self.key, values.pop(0)])
+        else:
+            loop = asyncio.get_event_loop()
+            future = loop.create_future()
+            waiting_queue[self.key].append(future)
+            try:
+                _ = await asyncio.wait_for(future, self.timeout)
+                return encode([self.key, storage.get_list(self.key).pop(0)])
+            except TimeoutError:
+                return encode(None)

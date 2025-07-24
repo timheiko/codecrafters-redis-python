@@ -56,3 +56,13 @@ redis-cli XADD stream_key2 1-* temperature 36 humidity 95
 redis-cli XADD pineapple 0-* pear banana
 
 redis-cli XADD pineapple '*' pear banana
+
+
+redis-cli XADD some_key 1526985054069-0 temperature 36 humidity 95
+redis-cli XADD some_key 1526985054079-0 temperature 37 humidity 94
+redis-cli XRANGE some_key 1526985054069 1526985054079
+
+redis-cli XADD stream_key_xrange 0-1 foo bar
+redis-cli XADD stream_key_xrange 0-2 bar baz
+redis-cli XADD stream_key_xrange 0-3 baz foo
+redis-cli XRANGE stream_key_xrange 0-2 0-3

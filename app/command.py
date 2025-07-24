@@ -328,3 +328,33 @@ class XADD(RedisCommand):
         except ValueError as error:
             log("encode(error)", encode(error))
             return encode(error)
+
+
+@registry.register
+@dataclass
+class XRANGE(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/xrange/
+    """
+
+    key: str
+    start: str
+    end: str
+
+    def __init__(self, *args):
+        match args:
+            case [key, start, end]:
+                self.key = key
+                self.start = start
+                self.end = end
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        stream: Stream = storage.get_stream(self.key)
+        entries = [
+            [entry.idx, list(itertools.chain.from_iterable(entry.field_values))]
+            for entry in stream.entries
+            if self.start <= entry.idx <= self.end
+        ]
+        return encode(entries)

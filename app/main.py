@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import ClassVar, Self
 
-from app.command import registry, ECHO, GET, LLEN, LPOP, PING, SET
+from app.command import registry, waiting_queue, ECHO, GET, LLEN, LPOP, PING, SET
 
 from app.resp import decode, encode, encode_simple
 from app.storage import storage
@@ -21,9 +21,6 @@ class Message:
         return Message(contents=decode(payload))
 
 
-waiting_queue = defaultdict(deque)
-
-
 async def handle_echo(reader: StreamReader, writer: StreamWriter):
     while len(data := await reader.read(1024)) > 0:
         message = Message.parse(data)
@@ -32,15 +29,6 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         if command in registry:
             cmd = registry[command](*args)
             writer.write(cmd.execute())
-        elif command == "RPUSH":
-            key, *items = message.contents[1:]
-            values = storage.get_list(key)
-            values.extend(items)
-            storage.set(key, values)
-            writer.write(encode(len(values)))
-            for _ in items:
-                if len(waiting_queue[key]) > 0:
-                    waiting_queue[key].popleft().set_result(True)
         elif command == "LPUSH":
             key, *items = message.contents[1:]
             values = storage.get_list(key)

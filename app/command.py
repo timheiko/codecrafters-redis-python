@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict, deque
 from dataclasses import dataclass
 
 from app.resp import encode, encode_simple
@@ -29,6 +30,8 @@ class CommandRegistry:
 
 
 registry = CommandRegistry()
+
+waiting_queue = defaultdict(deque)
 
 
 class RedisCommand(ABC):
@@ -181,3 +184,27 @@ class LRANGE(RedisCommand):
 
     def execute(self):
         return encode(storage.get_list_range(self.key, self.start, self.end))
+
+
+@registry.register
+@dataclass
+class RPUSH(RedisCommand):
+    key: str
+    items: list[str]
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key, *items]:
+                self.key = key
+                self.items = items
+            case _:
+                raise ValueError
+
+    def execute(self):
+        values = storage.get_list(self.key)
+        values.extend(self.items)
+        storage.set(self.key, values)
+        for _ in self.items:
+            if len(waiting_queue[self.key]) > 0:
+                waiting_queue[self.key].popleft().set_result(True)
+        return encode(len(values))

@@ -1,6 +1,6 @@
 import unittest
 
-from app.command import ECHO, GET, LLEN, LPOP, LRANGE, PING, SET
+from app.command import ECHO, GET, LLEN, LPOP, LRANGE, PING, RPUSH, SET
 
 from app.storage import storage
 
@@ -90,6 +90,13 @@ class TestCommand(unittest.TestCase):
         self.assertEqual(command.key, key)
         self.assertEqual(command.start, 0)
         self.assertEqual(command.end, -1)
+
+    def test_rpush_constractor(self):
+        key, *items = ["my_list_rpush", "stone", "paper", "scissors"]
+        command = RPUSH(key, *items)
+
+        self.assertEqual(command.key, key)
+        self.assertEqual(command.items, ["stone", "paper", "scissors"])
 
 
 if __name__ == "__main__":

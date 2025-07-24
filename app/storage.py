@@ -1,6 +1,12 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 import sys
 from typing import Optional
+
+
+@dataclass
+class Stream:
+    pass
 
 
 class Storage:
@@ -33,6 +39,9 @@ class Storage:
 
     def clean(self):
         self.__storage = {}
+
+    def get_stream(self, key: str) -> Stream:
+        self.__storage.get(key) or Stream()
 
 
 storage = Storage()

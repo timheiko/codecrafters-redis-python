@@ -2,10 +2,11 @@ from abc import ABC, abstractmethod
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
+import itertools
 
 from app.resp import encode, encode_simple
 
-from app.storage import storage
+from app.storage import Stream, storage
 
 
 class CommandRegistry:
@@ -288,7 +289,33 @@ class TYPE(RedisCommand):
                 return encode_simple("none")
             case str(_):
                 return encode_simple("string")
-            case [*_values]:
+            case [*_]:
                 return encode_simple("list")
+            case Stream():
+                return encode_simple("stream")
             case _:
                 raise ValueError
+
+
+@registry.register
+@dataclass
+class XADD(RedisCommand):
+    key: str
+    idx: str
+    payload: tuple[tuple[str, str]]
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key, idx, *field_vals]:
+                self.key = key
+                self.idx = idx
+                self.payload = tuple(
+                    (field, value)
+                    for field, value in itertools.batched(field_vals, 2, strict=True)
+                )
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        storage.set(self.key, Stream())
+        return encode(self.idx)

@@ -42,3 +42,7 @@ redis-cli TYPE string_key
 redis-cli TYPE missing_key
 redis-cli RPUSH list_key a b c
 redis-cli Type list_key
+
+
+redis-cli XADD stream_key 1526919030474-0 temperature 36 humidity 95
+redis-cli Type stream_key

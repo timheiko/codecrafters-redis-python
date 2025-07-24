@@ -13,10 +13,11 @@ from app.command import (
     RPUSH,
     SET,
     TYPE,
+    XADD,
     CommandRegistry,
 )
 
-from app.storage import storage
+from app.storage import Stream, storage
 
 
 class TestCommand(unittest.IsolatedAsyncioTestCase):
@@ -199,6 +200,41 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         await SET(key, value).execute()
 
         self.assertEqual(await TYPE(key).execute(), b"+string\r\n")
+
+    async def test_type_stream(self):
+        key = "temperature"
+
+        storage.set(key, Stream())
+
+        self.assertEqual(await TYPE(key).execute(), b"+stream\r\n")
+
+    async def test_xadd_construtor_even_field_values(self):
+        key, idx, *field_values = (
+            "stream_key 1526919030474-0 temperature 36 humidity 95".split()
+        )
+
+        cmd = XADD(key, idx, *field_values)
+
+        self.assertEqual(cmd.key, key)
+        self.assertEqual(cmd.idx, idx)
+        self.assertEqual(cmd.payload, (("temperature", "36"), ("humidity", "95")))
+
+    @unittest.expectedFailure
+    async def test_xadd_construtor_odd_field_values(self):
+        key, idx, *field_values = (
+            "stream_key 1526919030474-0 temperature 36 humidity 95 dangling-field".split()
+        )
+
+        XADD(key, idx, *field_values)
+
+    async def test_xadd_execute(self):
+        key, idx, *field_values = (
+            "stream_key 1526919030474-0 temperature 36 humidity 95".split()
+        )
+
+        await XADD(key, idx, *field_values).execute()
+
+        self.assertEqual(storage.get(key), Stream())
 
 
 if __name__ == "__main__":

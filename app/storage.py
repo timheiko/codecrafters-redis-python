@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import sys
+import time
 from typing import Optional, Self
 
 
@@ -8,6 +8,13 @@ from typing import Optional, Self
 class StreamEntry:
     idx: str
     field_values: tuple[tuple[str, str]]
+
+    def __init__(self, idx: str, field_values: tuple[tuple[str, str]]):
+        if idx == "*":
+            self.idx = f"{int(time.time() * 1_000)}-*"
+        else:
+            self.idx = idx
+        self.field_values = field_values
 
     def increment_idx_seq_num_and_get(self, other: Self | None = None) -> Self:
         match self.idx.split("-"):
@@ -24,6 +31,9 @@ class StreamEntry:
                 return StreamEntry(
                     idx=f"{idx_ms}-{seq_num}", field_values=self.field_values
                 )
+            case ["*"]:
+                idx_ms = int(time.time() * 1_000)
+                return StreamEntry(idx=f"{idx_ms}-0", field_values=self.field_values)
             case _:
                 return self
 

@@ -311,6 +311,11 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             await XADD(key, idx, *field_values).execute(), b"$3\r\n2-0\r\n"
         )
 
+    async def test_xadd_execute_star(self):
+        key, idx, *field_values = "stream_key * foo bar".split()
+        idx_out = await XADD(key, idx, *field_values).execute()
+        self.assertEqual(idx_out[:5], b"$15\r\n")
+
 
 if __name__ == "__main__":
     unittest.main()

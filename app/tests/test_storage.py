@@ -121,6 +121,14 @@ class TestStorage(unittest.TestCase):
 
         self.assertEqual(len(stream), 3)
 
+    def test_storage_stream_append_star_multiple(self):
+        stream = Stream()
+
+        stream.append(StreamEntry(idx="*", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="*", field_values=(("bar", "baz"))))
+
+        self.assertEqual(len(stream), 2)
+
     @unittest.expectedFailure
     def test_storage_stream_add_invalid(self):
         stream = Stream()
@@ -134,24 +142,24 @@ class TestStorage(unittest.TestCase):
         stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
         stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
 
-    def test_storage_entry_increment_idx_seq_num_and_get_no_star(self):
+    def test_stream_entry_increment_idx_seq_num_and_get_no_star(self):
         entry = StreamEntry("0-1", tuple(("foo", "bar")))
 
         self.assertEqual(entry.increment_idx_seq_num_and_get(), entry)
 
-    def test_storage_entry_increment_idx_seq_num_and_get_zero(self):
+    def test_stream_entry_increment_idx_seq_num_and_get_zero(self):
         self.assertEqual(
             StreamEntry("0-*", tuple(("bar", "baz"))).increment_idx_seq_num_and_get(),
             StreamEntry("0-1", tuple(("bar", "baz"))),
         )
 
-    def test_storage_entry_increment_idx_seq_num_and_get_idx_ms_non_zero(self):
+    def test_stream_entry_increment_idx_seq_num_and_get_idx_ms_non_zero(self):
         self.assertEqual(
             StreamEntry("1-*", tuple(("bar", "baz"))).increment_idx_seq_num_and_get(),
             StreamEntry("1-0", tuple(("bar", "baz"))),
         )
 
-    def test_storage_entry_increment_non_matching_idx_seq_num(self):
+    def test_stream_entry_increment_non_matching_idx_seq_num(self):
         self.assertEqual(
             StreamEntry("2-*", tuple(("bar", "baz"))).increment_idx_seq_num_and_get(
                 StreamEntry("1-*", tuple(("foo", "bar")))
@@ -159,7 +167,7 @@ class TestStorage(unittest.TestCase):
             StreamEntry("2-0", tuple(("bar", "baz"))),
         )
 
-    def test_storage_entry_increment_idx_seq_num_and_get_existing(self):
+    def test_stream_entry_increment_idx_seq_num_and_get_existing(self):
         entry = StreamEntry("0-*", tuple(("baz", "qux"))).increment_idx_seq_num_and_get(
             StreamEntry("0-3", tuple())
         )
@@ -168,3 +176,9 @@ class TestStorage(unittest.TestCase):
             entry.increment_idx_seq_num_and_get(),
             StreamEntry("0-4", tuple(("baz", "qux"))),
         )
+
+    def test_stream_add_entry_idx_star(self):
+        entry = StreamEntry("*", tuple(("baz", "qux")))
+
+        self.assertTrue(len(entry.idx) > 1)
+        self.assertIn("-*", entry.idx)

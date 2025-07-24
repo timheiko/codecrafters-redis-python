@@ -23,6 +23,12 @@ class CommandRegistry:
         self.__registry[cls_name] = cls
         return cls
 
+    async def execute(self, command: str, *args: list[str]) -> bytes:
+        cmd = command.upper()
+        if cmd in self:
+            return await self[cmd](*args).execute()
+        raise Exception(f"Unknown command: {command}")
+
     def __getitem__(self, key):
         return self.__registry[key]
 

@@ -31,5 +31,8 @@ class Storage:
         end = (end if end >= 0 else max(0, n + end)) + 1
         return values[start:end]
 
+    def clean(self):
+        self.__storage = {}
+
 
 storage = Storage()

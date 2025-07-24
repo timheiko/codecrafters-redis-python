@@ -12,8 +12,8 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
         command, *args = decode(data)
         log(f"command {command} args: {args}")
         writer.write(await registry.execute(command, *args))
+        await writer.drain()
 
-    await writer.drain()
     writer.close()
     await writer.wait_closed()
 

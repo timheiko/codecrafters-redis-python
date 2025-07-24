@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 
 from app.command import (
@@ -18,6 +19,12 @@ from app.storage import storage
 
 
 class TestCommand(unittest.IsolatedAsyncioTestCase):
+
+    async def asyncSetUp(self):
+        storage.clean()
+
+    async def asyncTearDown(self):
+        storage.clean()
 
     def test_registry_register(self):
         registry = CommandRegistry()
@@ -143,6 +150,37 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(command.key, key)
         self.assertEqual(command.timeout, 0.5)
+
+    async def test_blpop_non_blocking_rpush(self):
+        key, value, timeout = "my_list_nonblocking_blpop", "apple", "0"
+        storage.set(key, [value])
+
+        self.assertEqual(
+            await BLPOP(key, timeout).execute(),
+            b"*2\r\n$25\r\nmy_list_nonblocking_blpop\r\n$5\r\napple\r\n",
+        )
+
+    async def test_blpop_blocking_rpush(self):
+        key, value, timeout = "my_list_blpop_rpush", "mango", "1"
+
+        async with asyncio.TaskGroup() as task_group:
+            blpop = task_group.create_task(BLPOP(key, timeout).execute())
+            task_group.create_task(RPUSH(key, value).execute())
+
+        self.assertEqual(
+            blpop.result(), b"*2\r\n$19\r\nmy_list_blpop_rpush\r\n$5\r\nmango\r\n"
+        )
+
+    async def test_blpop_blocking_lpush(self):
+        key, value, timeout = "my_list_blpop_lpush", "pear", ".5"
+
+        async with asyncio.TaskGroup() as task_group:
+            blpop = task_group.create_task(BLPOP(key, timeout).execute())
+            task_group.create_task(LPUSH(key, value).execute())
+
+        self.assertEqual(
+            blpop.result(), b"*2\r\n$19\r\nmy_list_blpop_lpush\r\n$4\r\npear\r\n"
+        )
 
 
 if __name__ == "__main__":

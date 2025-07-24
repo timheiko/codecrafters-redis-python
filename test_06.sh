@@ -51,3 +51,6 @@ redis-cli XADD stream_key2 0-0 temperature 36 humidity 95
 redis-cli XADD stream_key2 1-0 temperature 36 humidity 95
 redis-cli XADD stream_key2 1-0 temperature 36 humidity 95
 redis-cli XADD stream_key2 0-1 temperature 36 humidity 95
+redis-cli XADD stream_key2 1-1 temperature 36 humidity 95
+redis-cli XADD stream_key2 1-* temperature 36 humidity 95
+redis-cli XADD pineapple 0-* pear banana

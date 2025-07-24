@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 import itertools
 
+from app.log import log
 from app.resp import encode, encode_simple
 
 from app.storage import Stream, StreamEntry, storage
@@ -319,8 +320,11 @@ class XADD(RedisCommand):
     async def execute(self):
         stream = storage.get_stream(self.key)
         try:
-            stream.append(StreamEntry(idx=self.idx, field_values=self.field_values))
+            entry = stream.append(
+                StreamEntry(idx=self.idx, field_values=self.field_values)
+            )
             storage.set(self.key, stream)
-            return encode(self.idx)
+            return encode(entry.idx)
         except ValueError as error:
+            log("encode(error)", encode(error))
             return encode(error)

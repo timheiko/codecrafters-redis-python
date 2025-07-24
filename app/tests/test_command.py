@@ -250,8 +250,20 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(storage.get(key)), 2)
 
-    async def test_xadd_execute_invalid_idx(self):
+    async def test_xadd_execute_invalid_idx_zero_zero(self):
         key, idx, *field_values = "stream_key 0-0 foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(),
+            b"-ERR The ID specified in XADD must be greater than 0-0\r\n",
+        )
+
+    async def test_xadd_execute_invalid_idx_zero_zero_after_valid(self):
+        key, idx, *field_values = "stream_key 1-0 foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-0\r\n"
+        )
+
+        key, idx, *field_values = "stream_key 0-0 bar baz".split()
         self.assertEqual(
             await XADD(key, idx, *field_values).execute(),
             b"-ERR The ID specified in XADD must be greater than 0-0\r\n",
@@ -277,6 +289,26 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             await XADD(key, idx, *field_values).execute(),
             b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n",
+        )
+
+    async def test_xadd_execute_star_idx_seq_num_multiple(self):
+        key, idx, *field_values = "stream_key 0-* foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n0-1\r\n"
+        )
+
+    async def test_xadd_execute_star_idx_seq_num_multiple(self):
+        key, idx, *field_values = "stream_key 1-1 foo bar".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+        )
+        key, idx, *field_values = "stream_key 1-* bar baz".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-2\r\n"
+        )
+        key, idx, *field_values = "stream_key 2-* baz qux".split()
+        self.assertEqual(
+            await XADD(key, idx, *field_values).execute(), b"$3\r\n2-0\r\n"
         )
 
 

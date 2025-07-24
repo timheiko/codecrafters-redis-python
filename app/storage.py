@@ -1,13 +1,31 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import sys
-from typing import Optional
+from typing import Optional, Self
 
 
 @dataclass
 class StreamEntry:
     idx: str
     field_values: tuple[tuple[str, str]]
+
+    def increment_idx_seq_num_and_get(self, other: Self | None = None) -> Self:
+        match self.idx.split("-"):
+            case [idx_ms, "*"]:
+                if other is None or other.idx < self.idx:
+                    seq_num = 1 if idx_ms == "0" else 0
+                else:
+                    other_idx_ms, other_idx_seq_num = other.idx.split("-")
+                    if idx_ms == other_idx_ms:
+                        seq_num = int(other_idx_seq_num) + 1
+                    else:
+                        seq_num = 0
+
+                return StreamEntry(
+                    idx=f"{idx_ms}-{seq_num}", field_values=self.field_values
+                )
+            case _:
+                return self
 
 
 @dataclass
@@ -17,15 +35,21 @@ class Stream:
     def __init__(self, *entries: list[StreamEntry]):
         self.entries = list(entries)
 
-    def append(self, entry: StreamEntry) -> None:
-        if entry.idx <= "0-0":
+    def append(self, entry: StreamEntry) -> StreamEntry:
+        if entry.increment_idx_seq_num_and_get().idx <= "0-0":
             raise ValueError("The ID specified in XADD must be greater than 0-0")
-        if self.entries and self.entries[-1].idx >= entry.idx:
-            raise ValueError(
-                "The ID specified in XADD is equal or smaller than the target stream top item"
-            )
+
+        if self.entries:
+            entry = entry.increment_idx_seq_num_and_get(self.entries[-1])
+            if self.entries[-1].idx >= entry.idx:
+                raise ValueError(
+                    "The ID specified in XADD is equal or smaller than the target stream top item"
+                )
+        else:
+            entry = entry.increment_idx_seq_num_and_get(None)
 
         self.entries.append(entry)
+        return entry
 
     def __len__(self):
         return len(self.entries)

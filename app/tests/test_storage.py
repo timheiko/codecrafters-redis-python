@@ -112,6 +112,15 @@ class TestStorage(unittest.TestCase):
 
         self.assertEqual(len(stream), 2)
 
+    def test_storage_stream_add_valid_multiple_same_ms_star(self):
+        stream = Stream()
+
+        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="0-*", field_values=(("bar", "baz"))))
+        stream.append(StreamEntry(idx="0-*", field_values=(("baz", "qux"))))
+
+        self.assertEqual(len(stream), 3)
+
     @unittest.expectedFailure
     def test_storage_stream_add_invalid(self):
         stream = Stream()
@@ -124,3 +133,38 @@ class TestStorage(unittest.TestCase):
 
         stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
         stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+
+    def test_storage_entry_increment_idx_seq_num_and_get_no_star(self):
+        entry = StreamEntry("0-1", tuple(("foo", "bar")))
+
+        self.assertEqual(entry.increment_idx_seq_num_and_get(), entry)
+
+    def test_storage_entry_increment_idx_seq_num_and_get_zero(self):
+        self.assertEqual(
+            StreamEntry("0-*", tuple(("bar", "baz"))).increment_idx_seq_num_and_get(),
+            StreamEntry("0-1", tuple(("bar", "baz"))),
+        )
+
+    def test_storage_entry_increment_idx_seq_num_and_get_idx_ms_non_zero(self):
+        self.assertEqual(
+            StreamEntry("1-*", tuple(("bar", "baz"))).increment_idx_seq_num_and_get(),
+            StreamEntry("1-0", tuple(("bar", "baz"))),
+        )
+
+    def test_storage_entry_increment_non_matching_idx_seq_num(self):
+        self.assertEqual(
+            StreamEntry("2-*", tuple(("bar", "baz"))).increment_idx_seq_num_and_get(
+                StreamEntry("1-*", tuple(("foo", "bar")))
+            ),
+            StreamEntry("2-0", tuple(("bar", "baz"))),
+        )
+
+    def test_storage_entry_increment_idx_seq_num_and_get_existing(self):
+        entry = StreamEntry("0-*", tuple(("baz", "qux"))).increment_idx_seq_num_and_get(
+            StreamEntry("0-3", tuple())
+        )
+
+        self.assertEqual(
+            entry.increment_idx_seq_num_and_get(),
+            StreamEntry("0-4", tuple(("baz", "qux"))),
+        )

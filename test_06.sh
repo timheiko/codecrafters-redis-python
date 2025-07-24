@@ -66,3 +66,5 @@ redis-cli XADD stream_key_xrange 0-1 foo bar
 redis-cli XADD stream_key_xrange 0-2 bar baz
 redis-cli XADD stream_key_xrange 0-3 baz foo
 redis-cli XRANGE stream_key_xrange 0-2 0-3
+
+redis-cli XRANGE stream_key_xrange - +

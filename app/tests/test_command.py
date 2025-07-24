@@ -317,14 +317,52 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         idx_out = await XADD(key, idx, *field_values).execute()
         self.assertEqual(idx_out[:5], b"$15\r\n")
 
+    async def test_xrange_constructor(self):
+        key, start, end = "stream_key_xrange 0-2 0-3".split()
+        cmd = XRANGE(key, start, end)
+
+        self.assertEqual(cmd.key, key)
+        self.assertEqual(cmd.start, start)
+        self.assertEqual(cmd.end, end)
+
+    async def test_xrange_constructor_minus(self):
+        key, start, end = "stream_key_xrange - 0-3".split()
+        cmd = XRANGE(key, start, end)
+
+        self.assertEqual(cmd.key, key)
+        self.assertEqual(cmd.start, "0-0")
+        self.assertEqual(cmd.end, end)
+
+    async def test_xrange_constructor_plus(self):
+        key, start, end = "stream_key_xrange 0-1 +".split()
+        cmd = XRANGE(key, start, end)
+
+        self.assertEqual(cmd.key, key)
+        self.assertEqual(cmd.start, start)
+        self.assertEqual(cmd.end, "9" * 20)
+
     async def test_xrange(self):
         await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
         await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
         await XADD(*"stream_key_xrange 0-3 baz foo".split()).execute()
+
         encoded = await XRANGE(*"stream_key_xrange 0-2 0-3".split()).execute()
+
         self.assertEqual(
             encoded,
             b"*2\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
+        )
+
+    async def test_xrange(self):
+        await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
+        await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
+        await XADD(*"stream_key_xrange 0-3 baz foo".split()).execute()
+
+        encoded = await XRANGE(*"stream_key_xrange - +".split()).execute()
+
+        self.assertEqual(
+            encoded,
+            b"*3\r\n*2\r\n$3\r\n0-1\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
         )
 
     async def test_xrange_empty(self):

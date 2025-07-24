@@ -345,8 +345,8 @@ class XRANGE(RedisCommand):
         match args:
             case [key, start, end]:
                 self.key = key
-                self.start = start
-                self.end = end
+                self.start = start if start != "-" else "0-0"
+                self.end = end if end != "+" else "9" * 20
             case _:
                 raise ValueError
 

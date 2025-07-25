@@ -7,9 +7,9 @@ from typing import Optional, Self
 @dataclass
 class StreamEntry:
     idx: str
-    field_values: tuple[tuple[str, str]]
+    field_values: tuple[str]
 
-    def __init__(self, idx: str, field_values: tuple[tuple[str, str]]):
+    def __init__(self, idx: str, field_values: tuple[str]):
         if idx == "*":
             self.idx = f"{int(time.time() * 1_000)}-*"
         else:

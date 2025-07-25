@@ -219,7 +219,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(cmd.key, key)
         self.assertEqual(cmd.idx, idx)
-        self.assertEqual(cmd.field_values, (("temperature", "36"), ("humidity", "95")))
+        self.assertEqual(cmd.field_values, ("temperature", "36", "humidity", "95"))
 
     @unittest.expectedFailure
     async def test_xadd_construtor_odd_field_values(self):
@@ -370,6 +370,13 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         encoded = await XRANGE(*"stream_key_xrange 0-2 0-3".split()).execute()
         self.assertEqual(encoded, b"*0\r\n")
 
+    async def test_xread_constructor(self):
+        cmd = XREAD(*"streams stream_key other_stream_key 0-0 0-1".split())
+
+        self.assertEqual(
+            cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
+        )
+
     async def test_xread(self):
         await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
         await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
@@ -380,6 +387,22 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             encoded,
             b"*1\r\n*2\r\n$17\r\nstream_key_xrange\r\n*3\r\n*2\r\n$3\r\n0-1\r\n*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
+        )
+
+    async def test_xread_multiple(self):
+        await XADD(*"stream_key_xrange_1 0-1 foo bar".split()).execute()
+        await XADD(*"stream_key_xrange_1 0-2 bar baz".split()).execute()
+        await XADD(*"stream_key_xrange_1 0-3 bar baz".split()).execute()
+        await XADD(*"stream_key_xrange_2 0-3 baz foo".split()).execute()
+
+        encoded = await XREAD(
+            *"streams stream_key_xrange_1 stream_key_xrange_2 0-1 0-2".split()
+        ).execute()
+        print("encoded >>>", encoded)
+
+        self.assertEqual(
+            encoded,
+            b"*2\r\n*2\r\n$19\r\nstream_key_xrange_1\r\n*2\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$19\r\nstream_key_xrange_2\r\n*1\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
         )
 
 

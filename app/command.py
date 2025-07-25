@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
-import itertools
 
 from app.log import log
 from app.resp import encode, encode_simple
@@ -303,17 +302,17 @@ class TYPE(RedisCommand):
 class XADD(RedisCommand):
     key: str
     idx: str
-    field_values: tuple[tuple[str, str]]
+    field_values: tuple[str]
 
     def __init__(self, *args: list[str]):
         match args:
             case [key, idx, *field_vals]:
-                self.key = key
-                self.idx = idx
-                self.field_values = tuple(
-                    (field, value)
-                    for field, value in itertools.batched(field_vals, 2, strict=True)
-                )
+                if len(field_vals) % 2 == 0:
+                    self.key = key
+                    self.idx = idx
+                    self.field_values = tuple(field_vals)
+                else:
+                    raise ValueError
             case _:
                 raise ValueError
 
@@ -353,7 +352,7 @@ class XRANGE(RedisCommand):
     async def execute(self):
         stream: Stream = storage.get_stream(self.key)
         entries = [
-            [entry.idx, list(itertools.chain.from_iterable(entry.field_values))]
+            [entry.idx, list(entry.field_values)]
             for entry in stream.entries
             if self.start <= entry.idx <= self.end
         ]
@@ -367,22 +366,27 @@ class XREAD(RedisCommand):
     https://redis.io/docs/latest/commands/xread/
     """
 
-    key: str
-    start: str
+    queries: tuple[tuple[str, str]]
 
     def __init__(self, *args):
         match args:
-            case [_streams, key, start]:
-                self.key = key
-                self.start = start
+            case [_streams, *streams]:
+                n = len(streams)
+                self.queries = tuple(
+                    (streams[i], streams[i + n // 2]) for i in range(n // 2)
+                )
             case _:
                 raise ValueError
 
     async def execute(self):
-        stream: Stream = storage.get_stream(self.key)
-        entries = [
-            [entry.idx, list(itertools.chain.from_iterable(entry.field_values))]
-            for entry in stream.entries
-            if self.start < entry.idx
-        ]
-        return encode([[self.key, entries]])
+        response = []
+        for key, start in self.queries:
+            stream = storage.get_stream(key)
+            entries = [
+                [entry.idx, list(entry.field_values)]
+                for entry in stream.entries
+                if start < entry.idx
+            ]
+            response.append([key, entries])
+
+        return encode(response)

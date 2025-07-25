@@ -92,40 +92,40 @@ class TestStorage(unittest.TestCase):
     def test_storage_stream_add_valid(self):
         stream = Stream()
 
-        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="0-1", field_values=("foo", "bar")))
 
         self.assertEqual(len(stream), 1)
 
     def test_storage_stream_add_valid_multiple_different_ms(self):
         stream = Stream()
 
-        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
-        stream.append(StreamEntry(idx="1-1", field_values=(("bar", "baz"))))
+        stream.append(StreamEntry(idx="0-1", field_values=("foo", "bar")))
+        stream.append(StreamEntry(idx="1-1", field_values=("bar", "baz")))
 
         self.assertEqual(len(stream), 2)
 
     def test_storage_stream_add_valid_multiple_same_ms(self):
         stream = Stream()
 
-        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
-        stream.append(StreamEntry(idx="0-2", field_values=(("bar", "baz"))))
+        stream.append(StreamEntry(idx="0-1", field_values=("foo", "bar")))
+        stream.append(StreamEntry(idx="0-2", field_values=("bar", "baz")))
 
         self.assertEqual(len(stream), 2)
 
     def test_storage_stream_add_valid_multiple_same_ms_star(self):
         stream = Stream()
 
-        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
-        stream.append(StreamEntry(idx="0-*", field_values=(("bar", "baz"))))
-        stream.append(StreamEntry(idx="0-*", field_values=(("baz", "qux"))))
+        stream.append(StreamEntry(idx="0-1", field_values=("foo", "bar")))
+        stream.append(StreamEntry(idx="0-*", field_values=("bar", "baz")))
+        stream.append(StreamEntry(idx="0-*", field_values=("baz", "qux")))
 
         self.assertEqual(len(stream), 3)
 
     def test_storage_stream_append_star_multiple(self):
         stream = Stream()
 
-        stream.append(StreamEntry(idx="*", field_values=(("foo", "bar"))))
-        stream.append(StreamEntry(idx="*", field_values=(("bar", "baz"))))
+        stream.append(StreamEntry(idx="*", field_values=("foo", "bar")))
+        stream.append(StreamEntry(idx="*", field_values=("bar", "baz")))
 
         self.assertEqual(len(stream), 2)
 
@@ -133,14 +133,14 @@ class TestStorage(unittest.TestCase):
     def test_storage_stream_add_invalid(self):
         stream = Stream()
 
-        stream.append(StreamEntry(idx="0-0", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="0-0", field_values=("foo", "bar")))
 
     @unittest.expectedFailure
     def test_storage_stream_add_invalid_multiple_same_idx(self):
         stream = Stream()
 
-        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
-        stream.append(StreamEntry(idx="0-1", field_values=(("foo", "bar"))))
+        stream.append(StreamEntry(idx="0-1", field_values=("foo", "bar")))
+        stream.append(StreamEntry(idx="0-1", field_values=("foo", "bar")))
 
     def test_stream_entry_increment_idx_seq_num_and_get_no_star(self):
         entry = StreamEntry("0-1", tuple(("foo", "bar")))

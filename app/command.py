@@ -480,3 +480,17 @@ class INCR(RedisCommand):
             return encode(value)
         except ValueError:
             return encode(ValueError("value is not an integer or out of range"))
+
+
+@registry.register
+@dataclass
+class MULTI(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/multi/
+    """
+
+    def __init__(self, *args: list[str]):
+        pass
+
+    async def execute(self):
+        return encode_simple("OK")

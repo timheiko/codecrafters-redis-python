@@ -10,6 +10,7 @@ from app.command import (
     LPOP,
     LPUSH,
     LRANGE,
+    MULTI,
     PING,
     RPUSH,
     SET,
@@ -486,6 +487,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(await GET(key).execute(), b"$5\r\nhello\r\n")
+
+    async def test_multi(self):
+        self.assertEqual(await MULTI().execute(), b"+OK\r\n")
 
 
 if __name__ == "__main__":

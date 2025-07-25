@@ -576,7 +576,19 @@ class INFO(RedisCommand):
         match self.info:
             case self.REPLICATION:
                 if parse_args().replicaof:
-                    return encode("role:slave")
-                return encode("role:master")
+                    return encode("\n".join(
+                        [
+                            "role:slave",
+                        ]
+                    ))
+                return encode(
+                    "\n".join(
+                        [
+                            "role:master",
+                            "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
+                            "master_repl_offset:0",
+                        ]
+                    )
+                )
             case _:
                 raise ValueError

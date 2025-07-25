@@ -90,3 +90,5 @@ redis-cli incr foo
 redis-cli discard
 
 redis-cli discard
+
+redis-cli info replication

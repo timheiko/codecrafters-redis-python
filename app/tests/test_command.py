@@ -8,6 +8,7 @@ from app.command import (
     EXEC,
     GET,
     INCR,
+    INFO,
     LLEN,
     LPOP,
     LPUSH,
@@ -572,6 +573,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
     async def test_multi(self):
         self.assertEqual(await MULTI().execute(), b"+OK\r\n")
+
+    async def test_info_replication(self):
+        self.assertEqual(await INFO("replication").execute(), encode("role:master"))
 
 
 if __name__ == "__main__":

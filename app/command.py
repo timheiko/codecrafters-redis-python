@@ -552,3 +552,28 @@ class DISCARD(RedisCommand):
 
     async def execute(self):
         return encode_simple("OK")
+
+
+@registry.register
+@dataclass
+class INFO(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/info/
+    """
+
+    info: str
+    REPLICATION: ClassVar[str] = "replication"
+
+    def __init__(self, *args):
+        match args:
+            case [self.REPLICATION]:
+                self.info = self.REPLICATION
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        match self.info:
+            case self.REPLICATION:
+                return encode("role:master")
+            case _:
+                raise ValueError

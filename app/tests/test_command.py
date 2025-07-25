@@ -370,9 +370,28 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         encoded = await XRANGE(*"stream_key_xrange 0-2 0-3".split()).execute()
         self.assertEqual(encoded, b"*0\r\n")
 
-    async def test_xread_constructor(self):
+    async def test_xread_constructor_streams(self):
         cmd = XREAD(*"streams stream_key other_stream_key 0-0 0-1".split())
 
+        self.assertEqual(cmd.kind, "STREAMS")
+        self.assertEqual(
+            cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
+        )
+
+    async def test_xread_constructor_block(self):
+        cmd = XREAD(*"block 1000 streams stream_key other_stream_key 0-0 0-1".split())
+
+        self.assertEqual(cmd.kind, "BLOCK")
+        self.assertEqual(cmd.timeout, 1)
+        self.assertEqual(
+            cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
+        )
+
+    async def test_xread_constructor_block_zero_timeout(self):
+        cmd = XREAD(*"block 0 streams stream_key other_stream_key 0-0 0-1".split())
+
+        self.assertEqual(cmd.kind, "BLOCK")
+        self.assertIsNone(cmd.timeout)
         self.assertEqual(
             cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
         )
@@ -398,11 +417,27 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         encoded = await XREAD(
             *"streams stream_key_xrange_1 stream_key_xrange_2 0-1 0-2".split()
         ).execute()
-        print("encoded >>>", encoded)
 
         self.assertEqual(
             encoded,
             b"*2\r\n*2\r\n$19\r\nstream_key_xrange_1\r\n*2\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$19\r\nstream_key_xrange_2\r\n*1\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
+        )
+
+    @unittest.skip
+    async def test_xread_blocking(self):
+        async with asyncio.TaskGroup() as task_group:
+            xread = task_group.create_task(
+                XREAD(*"block 1000 streams some_key 1526985054069-0".split()).execute()
+            )
+            _ = task_group.create_task(
+                XADD(
+                    *"some_key 1526985054079-0 temperature 37 humidity 94".split()
+                ).execute()
+            )
+
+        self.assertEqual(
+            xread.result(),
+            b"*1\r\n*2\r\n$8\r\nsome_key\r\n*1\r\n*2\r\n$15\r\n1526985054079-0\r\n*4\r\n$11\r\ntemperature\r\n$2\r\n37\r\n$8\r\nhumidity\r\n$2\r\n94\r\n",
         )
 
 

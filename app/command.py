@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from typing import Callable, ClassVar
 
 from app.log import log
 from app.resp import encode, encode_simple
@@ -212,9 +213,7 @@ class RPUSH(RedisCommand):
         values = storage.get_list(self.key)
         values.extend(self.items)
         storage.set(self.key, values)
-        for _ in self.items:
-            if len(waiting_queue[self.key]) > 0:
-                waiting_queue[self.key].popleft().set_result(True)
+        await notify_waiting_list(self.key, len(values))
         return encode(len(values))
 
 
@@ -236,9 +235,7 @@ class LPUSH(RedisCommand):
         values = storage.get_list(self.key)
         values = self.items[::-1] + values
         storage.set(self.key, values)
-        for _ in self.items:
-            if len(waiting_queue[self.key]) > 0:
-                waiting_queue[self.key].popleft().set_result(True)
+        await notify_waiting_list(self.key, len(values))
         return encode(len(values))
 
 
@@ -261,14 +258,9 @@ class BLPOP(RedisCommand):
         if values:
             return encode([self.key, values.pop(0)])
         else:
-            loop = asyncio.get_event_loop()
-            future = loop.create_future()
-            waiting_queue[self.key].append(future)
-            try:
-                _ = await asyncio.wait_for(future, self.timeout)
-                return encode([self.key, storage.get_list(self.key).pop(0)])
-            except TimeoutError:
-                return encode(None)
+            callback = lambda: [self.key, storage.get_list(self.key).pop(0)]
+            value = await join_waiting_list(self.key, self.timeout, callback)
+            return encode(value)
 
 
 @registry.register
@@ -323,6 +315,7 @@ class XADD(RedisCommand):
                 StreamEntry(idx=self.idx, field_values=self.field_values)
             )
             storage.set(self.key, stream)
+            await notify_waiting_list(self.key, 1)
             return encode(entry.idx)
         except ValueError as error:
             log("encode(error)", encode(error))
@@ -366,27 +359,90 @@ class XREAD(RedisCommand):
     https://redis.io/docs/latest/commands/xread/
     """
 
+    STREAMS: ClassVar[str] = "STREAMS"
+    BLOCK: ClassVar[str] = "BLOCK"
+
+    kind: str
     queries: tuple[tuple[str, str]]
+    timeout: float | None
 
     def __init__(self, *args):
         match args:
-            case [_streams, *streams]:
-                n = len(streams)
-                self.queries = tuple(
-                    (streams[i], streams[i + n // 2]) for i in range(n // 2)
-                )
+            case [kind, *rest]:
+                self.kind = kind.upper()
+                match self.kind:
+                    case self.BLOCK:
+                        timeout, _streams, *rest = rest
+                        self.timeout = (
+                            float(timeout) / 1_000 if float(timeout) > 0 else None
+                        )
+
+                match self.kind:
+                    case self.BLOCK | self.STREAMS:
+                        n = len(rest)
+                        self.queries = tuple(
+                            (rest[i], rest[i + n // 2]) for i in range(n // 2)
+                        )
+                    case _:
+                        raise ValueError
             case _:
                 raise ValueError
 
     async def execute(self):
-        response = []
-        for key, start in self.queries:
-            stream = storage.get_stream(key)
-            entries = [
-                [entry.idx, list(entry.field_values)]
-                for entry in stream.entries
-                if start < entry.idx
-            ]
-            response.append([key, entries])
+        response = self.__query()
+        match self.kind:
+            case self.STREAMS:
+                return encode(response)
+            case self.BLOCK:
+                if len(list(key for key, values in response if len(values) > 0)) > 0:
+                    return encode(response)
 
-        return encode(response)
+                callback = lambda: self.__query()
+                loop = asyncio.get_event_loop()
+                print(self.queries)
+                tasks = set(
+                    loop.create_task(join_waiting_list(key, self.timeout, callback))
+                    for key, _ in self.queries
+                )
+                finished_tasks, _pending = await asyncio.wait(
+                    tasks, timeout=self.timeout, return_when=asyncio.FIRST_COMPLETED
+                )
+
+                if len(finished_tasks) > 0:
+                    task = list(finished_tasks)[0]
+                    return encode(task.result())
+                return encode(None)
+            case _:
+                raise ValueError
+
+    def __query(self):
+        return [
+            [
+                key,
+                [
+                    [entry.idx, list(entry.field_values)]
+                    for entry in storage.get_stream(key).entries
+                    if start < entry.idx
+                ],
+            ]
+            for key, start in self.queries
+        ]
+
+
+async def join_waiting_list(
+    key: str, timeout: float | None, callback: Callable[[], any]
+) -> any:
+    loop = asyncio.get_event_loop()
+    future = loop.create_future()
+    waiting_queue[key].append(future)
+    try:
+        _ = await asyncio.wait_for(future, timeout)
+        return callback()
+    except TimeoutError:
+        return None
+
+
+async def notify_waiting_list(key: str, times: int) -> None:
+    for _ in range(times):
+        if len(waiting_queue[key]) > 0:
+            waiting_queue[key].popleft().set_result(True)

@@ -1,7 +1,7 @@
-import argparse
 import asyncio
 from asyncio import StreamReader, StreamWriter
 
+from app.args import parse_args
 from app.command import registry
 
 from app.resp import decode
@@ -20,11 +20,7 @@ async def handle_echo(reader: StreamReader, writer: StreamWriter):
 
 
 async def main():
-    argparser = argparse.ArgumentParser()
-    argparser.add_argument("--port", type=int, default=6379)
-    parsed = argparser.parse_args()
-
-    server = await asyncio.start_server(handle_echo, "localhost", parsed.port)
+    server = await asyncio.start_server(handle_echo, "localhost", parse_args().port)
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
     log(f"Serving on {addrs}")

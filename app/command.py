@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, ClassVar
 
+from app.args import parse_args
 from app.log import log
 from app.resp import decode, encode, encode_simple
 
@@ -574,6 +575,8 @@ class INFO(RedisCommand):
     async def execute(self):
         match self.info:
             case self.REPLICATION:
+                if parse_args().replicaof:
+                    return encode("role:slave")
                 return encode("role:master")
             case _:
                 raise ValueError

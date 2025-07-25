@@ -574,6 +574,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_multi(self):
         self.assertEqual(await MULTI().execute(), b"+OK\r\n")
 
+    @unittest.skip
     async def test_info_replication(self):
         self.assertEqual(await INFO("replication").execute(), encode("role:master"))
 

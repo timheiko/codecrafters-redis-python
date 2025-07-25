@@ -460,11 +460,11 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cmd.key, "foo")
 
     async def test_incr(self):
-        key = "foo"
+        key = "foo-missing"
 
-        await SET(key, "2").execute()
+        self.assertEqual(await INCR(key).execute(), b":1\r\n")
 
-        self.assertEqual(await INCR(key).execute(), b":3\r\n")
+        self.assertEqual(await GET(key).execute(), b"$1\r\n1\r\n")
 
 
 if __name__ == "__main__":

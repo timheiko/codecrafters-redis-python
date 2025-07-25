@@ -472,6 +472,8 @@ class INCR(RedisCommand):
                 raise ValueError
 
     async def execute(self):
-        value = int(storage.get(self.key)) + 1
-        storage.set(self.key, value)
+        value = storage.get(self.key)
+        value = int(value) if value is not None else 0
+        value += 1
+        storage.set(self.key, str(value))
         return encode(value)

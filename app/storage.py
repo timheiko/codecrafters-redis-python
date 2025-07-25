@@ -8,13 +8,15 @@ from typing import Optional, Self
 class StreamEntry:
     idx: str
     field_values: tuple[str]
+    ts: datetime
 
-    def __init__(self, idx: str, field_values: tuple[str]):
+    def __init__(self, idx: str, field_values: tuple[str], ts: datetime | None = None):
         if idx == "*":
             self.idx = f"{int(time.time() * 1_000)}-*"
         else:
             self.idx = idx
         self.field_values = field_values
+        self.ts = ts if ts is not None else datetime.now()
 
     def increment_idx_seq_num_and_get(self, other: Self | None = None) -> Self:
         match self.idx.split("-"):
@@ -29,11 +31,15 @@ class StreamEntry:
                         seq_num = 0
 
                 return StreamEntry(
-                    idx=f"{idx_ms}-{seq_num}", field_values=self.field_values
+                    idx=f"{idx_ms}-{seq_num}",
+                    field_values=self.field_values,
+                    ts=self.ts,
                 )
             case ["*"]:
                 idx_ms = int(time.time() * 1_000)
-                return StreamEntry(idx=f"{idx_ms}-0", field_values=self.field_values)
+                return StreamEntry(
+                    idx=f"{idx_ms}-0", field_values=self.field_values, ts=self.ts
+                )
             case _:
                 return self
 

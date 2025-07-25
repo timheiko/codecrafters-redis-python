@@ -377,6 +377,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
         )
+        self.assertFalse(cmd.new_only)
 
     async def test_xread_constructor_block(self):
         cmd = XREAD(*"block 1000 streams stream_key other_stream_key 0-0 0-1".split())
@@ -386,6 +387,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
         )
+        self.assertFalse(cmd.new_only)
 
     async def test_xread_constructor_block_zero_timeout(self):
         cmd = XREAD(*"block 0 streams stream_key other_stream_key 0-0 0-1".split())
@@ -395,6 +397,17 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
         )
+        self.assertFalse(cmd.new_only)
+
+    async def test_xread_constructor_block_new_only(self):
+        cmd = XREAD(*"block 2500 streams stream_key other_stream_key 0-0 0-1 $".split())
+
+        self.assertEqual(cmd.kind, "BLOCK")
+        self.assertEqual(cmd.timeout, 2.5)
+        self.assertEqual(
+            cmd.queries, (("stream_key", "0-0"), ("other_stream_key", "0-1"))
+        )
+        self.assertTrue(cmd.new_only)
 
     async def test_xread(self):
         await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()

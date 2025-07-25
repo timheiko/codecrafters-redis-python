@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Callable, ClassVar
 
 from app.log import log
@@ -365,8 +366,11 @@ class XREAD(RedisCommand):
     kind: str
     queries: tuple[tuple[str, str]]
     timeout: float | None
+    new_only: bool
 
     def __init__(self, *args):
+        self.new_only = False
+
         match args:
             case [kind, *rest]:
                 self.kind = kind.upper()
@@ -376,6 +380,7 @@ class XREAD(RedisCommand):
                         self.timeout = (
                             float(timeout) / 1_000 if float(timeout) > 0 else None
                         )
+                        self.new_only = rest[-1] == "$"
 
                 match self.kind:
                     case self.BLOCK | self.STREAMS:
@@ -394,12 +399,13 @@ class XREAD(RedisCommand):
             case self.STREAMS:
                 return encode(response)
             case self.BLOCK:
-                if len(list(key for key, values in response if len(values) > 0)) > 0:
-                    return encode(response)
-
-                callback = lambda: self.__query()
+                if not self.new_only:
+                    if list(key for key, values in response if len(values)):
+                        return encode(response)
+                    
+                ts = datetime.now() if self.new_only else datetime.fromtimestamp(0)
+                callback = lambda: self.__query(ts)
                 loop = asyncio.get_event_loop()
-                print(self.queries)
                 tasks = set(
                     loop.create_task(join_waiting_list(key, self.timeout, callback))
                     for key, _ in self.queries
@@ -415,14 +421,15 @@ class XREAD(RedisCommand):
             case _:
                 raise ValueError
 
-    def __query(self):
+    def __query(self, ts: datetime = datetime.fromtimestamp(0)):
         return [
             [
                 key,
                 [
                     [entry.idx, list(entry.field_values)]
                     for entry in storage.get_stream(key).entries
-                    if start < entry.idx
+                    if ts < entry.ts and start < entry.idx
+                    # if start < entry.idx
                 ],
             ]
             for key, start in self.queries

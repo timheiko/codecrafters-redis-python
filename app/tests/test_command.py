@@ -3,6 +3,7 @@ import unittest
 
 from app.command import (
     BLPOP,
+    DISCARD,
     ECHO,
     EXEC,
     GET,
@@ -80,6 +81,43 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             await registry.execute(transaction_id, "EXEC"),
             encode(ValueError("EXEC without MULTI")),
+        )
+
+    async def test_registry_transaction_discrad(self):
+        registry = CommandRegistry()
+        registry.register(MULTI)
+        registry.register(SET)
+        registry.register(GET)
+        registry.register(DISCARD)
+
+        transaction_id = 1
+
+        self.assertEqual(
+            await registry.execute(transaction_id, "MULTI"), encode_simple("OK")
+        )
+        self.assertEqual(
+            await registry.execute(transaction_id, "SET", "foo", "bar"),
+            encode_simple("QUEUED"),
+        )
+        self.assertEqual(
+            await registry.execute(transaction_id, "GET", "foo"),
+            encode_simple("QUEUED"),
+        )
+        self.assertEqual(
+            await registry.execute(transaction_id, "DISCARD"),
+            encode_simple("OK"),
+        )
+
+    async def test_registry_transaction_discard_without_multi(self):
+        registry = CommandRegistry()
+        registry.register(MULTI)
+        registry.register(DISCARD)
+
+        transaction_id = 1
+
+        self.assertEqual(
+            await registry.execute(transaction_id, "DISCARD"),
+            encode(ValueError("DISCARD without MULTI")),
         )
 
     @unittest.expectedFailure

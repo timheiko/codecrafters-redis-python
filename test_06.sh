@@ -81,3 +81,12 @@ redis-cli multi
 redis-cli set baz qux
 redis-cli incr foo
 redis-cli exec
+
+redis-cli exec
+
+redis-cli multi
+redis-cli set baz qux
+redis-cli incr foo
+redis-cli discard
+
+redis-cli discard

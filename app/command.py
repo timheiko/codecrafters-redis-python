@@ -48,6 +48,13 @@ class CommandRegistry:
                 del self.__transactions[transaction_id]
 
                 return encode(responses)
+            elif cmd_class == DISCARD:
+                if transaction_id not in self.__transactions:
+                    return encode(ValueError("DISCARD without MULTI"))
+
+                del self.__transactions[transaction_id]
+
+                return await cmd_class(*args).execute()
             elif transaction_id in self.__transactions:
                 self.__transactions[transaction_id].append(cmd_class(*args))
                 return encode_simple("QUEUED")
@@ -524,6 +531,20 @@ class MULTI(RedisCommand):
 class EXEC(RedisCommand):
     """
     https://redis.io/docs/latest/commands/exec/
+    """
+
+    def __init__(self, *args: list[str]):
+        pass
+
+    async def execute(self):
+        return encode_simple("OK")
+
+
+@registry.register
+@dataclass
+class DISCARD(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/discard/
     """
 
     def __init__(self, *args: list[str]):

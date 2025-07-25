@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Callable, ClassVar
 
 from app.log import log
-from app.resp import encode, encode_simple
+from app.resp import decode, encode, encode_simple
 
 from app.storage import Stream, StreamEntry, storage
 
@@ -14,6 +14,7 @@ from app.storage import Stream, StreamEntry, storage
 class CommandRegistry:
     def __init__(self):
         self.__registry = {}
+        self.__transactions = {}
 
     def register(self, cls):
         if not issubclass(cls, RedisCommand):
@@ -26,10 +27,32 @@ class CommandRegistry:
         self.__registry[cls_name] = cls
         return cls
 
-    async def execute(self, command: str, *args: list[str]) -> bytes:
+    async def execute(
+        self, transaction_id: int, command: str, *args: list[str]
+    ) -> bytes:
         cmd = command.upper()
         if cmd in self:
-            return await self[cmd](*args).execute()
+            cmd_class = self[cmd]
+            if cmd_class == MULTI:
+                self.__transactions[transaction_id] = []
+
+                return await cmd_class(*args).execute()
+            elif cmd_class == EXEC:
+                if transaction_id not in self.__transactions:
+                    return encode(ValueError("EXEC without MULTI"))
+
+                responses = [
+                    decode(await cmd.execute())
+                    for cmd in self.__transactions[transaction_id]
+                ]
+                del self.__transactions[transaction_id]
+
+                return encode(responses)
+            elif transaction_id in self.__transactions:
+                self.__transactions[transaction_id].append(cmd_class(*args))
+                return encode_simple("QUEUED")
+            else:
+                return await cmd_class(*args).execute()
         raise Exception(f"Unknown command: {command}")
 
     def __getitem__(self, key):
@@ -487,6 +510,20 @@ class INCR(RedisCommand):
 class MULTI(RedisCommand):
     """
     https://redis.io/docs/latest/commands/multi/
+    """
+
+    def __init__(self, *args: list[str]):
+        pass
+
+    async def execute(self):
+        return encode_simple("OK")
+
+
+@registry.register
+@dataclass
+class EXEC(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/exec/
     """
 
     def __init__(self, *args: list[str]):

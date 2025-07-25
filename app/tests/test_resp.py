@@ -47,6 +47,21 @@ class RespTest(unittest.TestCase):
             ["RPUSH", "list_key2", "a", "b", "c", "d", "e"],
         )
 
+    def test_decode_simple_string(self):
+        self.assertEqual(decode(encode_simple("OK")), "OK")
+
+    def test_decode_int(self):
+        self.assertEqual(decode(encode(2)), 2)
+
+    def test_decode_bulk_string(self):
+        self.assertEqual(decode(encode("value")), "value")
+
+    def test_decode_error(self):
+        self.assertEqual(
+            decode(encode(ValueError("error message"))).args,
+            ValueError("error message").args,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -76,3 +76,8 @@ redis-cli set foo 1
 redis-cli incr foo
 
 redis-cli incr foo-missing
+
+redis-cli multi
+redis-cli set baz qux
+redis-cli incr foo
+redis-cli exec

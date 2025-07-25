@@ -4,6 +4,7 @@ import unittest
 from app.command import (
     BLPOP,
     ECHO,
+    EXEC,
     GET,
     INCR,
     LLEN,
@@ -21,6 +22,7 @@ from app.command import (
     CommandRegistry,
 )
 
+from app.resp import encode, encode_simple
 from app.storage import Stream, storage
 
 
@@ -37,6 +39,48 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(SET)
         self.assertIn("SET", registry)
         self.assertEqual(registry["SET"], SET)
+
+    async def test_registry_transaction(self):
+        registry = CommandRegistry()
+        registry.register(MULTI)
+        registry.register(SET)
+        registry.register(GET)
+        registry.register(EXEC)
+
+        transaction_id = 1
+
+        self.assertEqual(
+            await registry.execute(transaction_id, "MULTI"), encode_simple("OK")
+        )
+        self.assertEqual(
+            await registry.execute(transaction_id, "SET", "foo", "bar"),
+            encode_simple("QUEUED"),
+        )
+        self.assertEqual(
+            await registry.execute(transaction_id, "GET", "foo"),
+            encode_simple("QUEUED"),
+        )
+        self.assertEqual(
+            await registry.execute(transaction_id, "EXEC"),
+            encode(["OK", "bar"]),
+        )
+
+        self.assertEqual(
+            await registry.execute(transaction_id, "GET", "foo"),
+            encode("bar"),
+        )
+
+    async def test_registry_transaction_exec_without_multi(self):
+        registry = CommandRegistry()
+        registry.register(MULTI)
+        registry.register(EXEC)
+
+        transaction_id = 1
+
+        self.assertEqual(
+            await registry.execute(transaction_id, "EXEC"),
+            encode(ValueError("EXEC without MULTI")),
+        )
 
     @unittest.expectedFailure
     def test_registry_register_duplicate(self):

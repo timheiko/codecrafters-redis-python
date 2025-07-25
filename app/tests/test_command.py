@@ -5,6 +5,7 @@ from app.command import (
     BLPOP,
     ECHO,
     GET,
+    INCR,
     LLEN,
     LPOP,
     LPUSH,
@@ -452,6 +453,18 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             xread.result(),
             b"*1\r\n*2\r\n$8\r\nsome_key\r\n*1\r\n*2\r\n$15\r\n1526985054079-0\r\n*4\r\n$11\r\ntemperature\r\n$2\r\n37\r\n$8\r\nhumidity\r\n$2\r\n94\r\n",
         )
+
+    def test_incr_constructor(self):
+        cmd = INCR("foo")
+
+        self.assertEqual(cmd.key, "foo")
+
+    async def test_incr(self):
+        key = "foo"
+
+        await SET(key, "2").execute()
+
+        self.assertEqual(await INCR(key).execute(), b":3\r\n")
 
 
 if __name__ == "__main__":

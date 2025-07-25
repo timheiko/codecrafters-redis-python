@@ -71,3 +71,6 @@ redis-cli XRANGE stream_key_xrange - +
 
 redis-cli XREAD streams stream_key_xrange 0-0
 redis-cli XREAD streams stream_key_xrange stream_key_xrange 0-0 0-2
+
+redis-cli set foo 1
+redis-cli incr foo

@@ -402,7 +402,7 @@ class XREAD(RedisCommand):
                 if not self.new_only:
                     if list(key for key, values in response if len(values)):
                         return encode(response)
-                    
+
                 ts = datetime.now() if self.new_only else datetime.fromtimestamp(0)
                 callback = lambda: self.__query(ts)
                 loop = asyncio.get_event_loop()
@@ -453,3 +453,25 @@ async def notify_waiting_list(key: str, times: int) -> None:
     for _ in range(times):
         if len(waiting_queue[key]) > 0:
             waiting_queue[key].popleft().set_result(True)
+
+
+@registry.register
+@dataclass
+class INCR(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/incr/
+    """
+
+    key: str
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [key]:
+                self.key = key
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        value = int(storage.get(self.key)) + 1
+        storage.set(self.key, value)
+        return encode(value)

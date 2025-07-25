@@ -473,7 +473,10 @@ class INCR(RedisCommand):
 
     async def execute(self):
         value = storage.get(self.key)
-        value = int(value) if value is not None else 0
-        value += 1
-        storage.set(self.key, str(value))
-        return encode(value)
+        try:
+            value = int(value) if value is not None else 0
+            value += 1
+            storage.set(self.key, str(value))
+            return encode(value)
+        except ValueError:
+            return encode(ValueError("value is not an integer or out of range"))

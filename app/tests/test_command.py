@@ -459,12 +459,33 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(cmd.key, "foo")
 
-    async def test_incr(self):
+    async def test_incr_present(self):
+        key = "foo-present"
+
+        self.assertEqual(await SET(key, "1").execute(), b"+OK\r\n")
+
+        self.assertEqual(await INCR(key).execute(), b":2\r\n")
+
+        self.assertEqual(await GET(key).execute(), b"$1\r\n2\r\n")
+
+    async def test_incr_missing(self):
         key = "foo-missing"
 
         self.assertEqual(await INCR(key).execute(), b":1\r\n")
 
         self.assertEqual(await GET(key).execute(), b"$1\r\n1\r\n")
+
+    async def test_incr_non_int(self):
+        key = "foo-non-int"
+
+        self.assertEqual(await SET(key, "hello").execute(), b"+OK\r\n")
+
+        self.assertEqual(
+            await INCR(key).execute(),
+            b"-ERR value is not an integer or out of range\r\n",
+        )
+
+        self.assertEqual(await GET(key).execute(), b"$5\r\nhello\r\n")
 
 
 if __name__ == "__main__":

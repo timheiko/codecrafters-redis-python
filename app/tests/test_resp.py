@@ -44,22 +44,30 @@ class RespTest(unittest.TestCase):
             decode(
                 b"*7\r\n$5\r\nRPUSH\r\n$9\r\nlist_key2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n"
             ),
-            ["RPUSH", "list_key2", "a", "b", "c", "d", "e"],
+            [["RPUSH", "list_key2", "a", "b", "c", "d", "e"]],
         )
 
     def test_decode_simple_string(self):
-        self.assertEqual(decode(encode_simple("OK")), "OK")
+        self.assertEqual(decode(encode_simple("OK")), ["OK"])
 
     def test_decode_int(self):
-        self.assertEqual(decode(encode(2)), 2)
+        self.assertEqual(decode(encode(2)), [2])
 
     def test_decode_bulk_string(self):
-        self.assertEqual(decode(encode("value")), "value")
+        self.assertEqual(decode(encode("value")), ["value"])
 
     def test_decode_error(self):
         self.assertEqual(
-            decode(encode(ValueError("error message"))).args,
+            decode(encode(ValueError("error message")))[0].args,
             ValueError("error message").args,
+        )
+
+    def test_decode_command_batch(self):
+        batch = b"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n456\r\n*3\r\n$3\r\nSET\r\n$3\r\nbaz\r\n$3\r\n789\r\n"
+        self.assertEqual(
+            decode(batch),
+            [["SET", "foo", "123"], ["SET", "bar", "456"], ["SET", "baz", "789"]],
+            batch,
         )
 
 

@@ -53,7 +53,7 @@ class CommandRegistry:
                     return encode(ValueError("EXEC without MULTI"))
 
                 responses = [
-                    decode(await cmd.execute())
+                    decode(await cmd.execute())[0]
                     for cmd in self.__transactions[transaction_id]
                 ]
                 del self.__transactions[transaction_id]

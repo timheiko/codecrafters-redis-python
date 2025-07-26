@@ -29,6 +29,7 @@ async def handshake(args: Args):
             "PING",
             f"REPLCONF listening-port {args.port}",
             "REPLCONF capa psync2",
+            "PSYNC ? -1",
         ]
         for cmd in handshake_commands:
             cmd_items = cmd.split()

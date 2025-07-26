@@ -2,22 +2,37 @@ import asyncio
 from asyncio import StreamReader, StreamWriter
 
 from app.args import Args, parse_args
-from app.command import registry
+from app.command import PSYNC, SET, registry
 
 from app.resp import decode, encode
 from app.log import log
 
+replicas = []
 
-async def handle_echo(reader: StreamReader, writer: StreamWriter):
+
+async def execute_command(reader: StreamReader, writer: StreamWriter, is_master: bool):
     while len(data := await reader.read(1024)) > 0:
         command, *args = decode(data)
         log(f"command {command} args: {args}")
         for payload in await registry.execute(id(writer), command, *args):
-            writer.write(payload)
-            await writer.drain()
+            if is_master:
+                writer.write(payload)
+                await writer.drain()
 
-    writer.close()
-    await writer.wait_closed()
+        if registry[command] == PSYNC:
+            replicas.append((reader, writer))
+
+        if registry[command] == SET:
+            for _, w in replicas:
+                w.write(data)
+
+
+async def handle_commands(reader: StreamReader, writer: StreamWriter):
+    await execute_command(reader, writer, True)
+
+    if (reader, writer) not in replicas:
+        writer.close()
+        await writer.wait_closed()
 
 
 async def handshake(args: Args):
@@ -40,14 +55,16 @@ async def handshake(args: Args):
             response = decode(await reader.read(1024))
             log("handshake stage response:", response)
 
-        writer.close()
-        await writer.wait_closed()
+        rdb = await reader.read(1024)
+        log("rdb", rdb)
+
         log("handshake finished")
+        await execute_command(reader, writer, args.is_master())
 
 
 async def main():
     args = parse_args()
-    server = await asyncio.start_server(handle_echo, "localhost", args.port)
+    server = await asyncio.start_server(handle_commands, "localhost", args.port)
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
     log(f"Serving on {addrs}")

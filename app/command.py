@@ -74,7 +74,7 @@ class CommandRegistry:
         raise Exception(f"Unknown command: {command}")
 
     def __getitem__(self, key):
-        return self.__registry[key]
+        return self.__registry[key.upper()]
 
     def __contains__(self, key):
         return key in self.__registry

@@ -54,24 +54,24 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         transaction_id = 1
 
         self.assertEqual(
-            await registry.execute(transaction_id, "MULTI"), encode_simple("OK")
+            await registry.execute(transaction_id, "MULTI"), [encode_simple("OK")]
         )
         self.assertEqual(
             await registry.execute(transaction_id, "SET", "foo", "bar"),
-            encode_simple("QUEUED"),
+            [encode_simple("QUEUED")],
         )
         self.assertEqual(
             await registry.execute(transaction_id, "GET", "foo"),
-            encode_simple("QUEUED"),
+            [encode_simple("QUEUED")],
         )
         self.assertEqual(
             await registry.execute(transaction_id, "EXEC"),
-            encode(["OK", "bar"]),
+            [encode(["OK", "bar"])],
         )
 
         self.assertEqual(
             await registry.execute(transaction_id, "GET", "foo"),
-            encode("bar"),
+            [encode("bar")],
         )
 
     async def test_registry_transaction_exec_without_multi(self):
@@ -83,7 +83,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             await registry.execute(transaction_id, "EXEC"),
-            encode(ValueError("EXEC without MULTI")),
+            [encode(ValueError("EXEC without MULTI"))],
         )
 
     async def test_registry_transaction_discrad(self):
@@ -96,19 +96,19 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         transaction_id = 1
 
         self.assertEqual(
-            await registry.execute(transaction_id, "MULTI"), encode_simple("OK")
+            await registry.execute(transaction_id, "MULTI"), [encode_simple("OK")]
         )
         self.assertEqual(
             await registry.execute(transaction_id, "SET", "foo", "bar"),
-            encode_simple("QUEUED"),
+            [encode_simple("QUEUED")],
         )
         self.assertEqual(
             await registry.execute(transaction_id, "GET", "foo"),
-            encode_simple("QUEUED"),
+            [encode_simple("QUEUED")],
         )
         self.assertEqual(
             await registry.execute(transaction_id, "DISCARD"),
-            encode_simple("OK"),
+            [encode_simple("OK")],
         )
 
     async def test_registry_transaction_discard_without_multi(self):
@@ -120,7 +120,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             await registry.execute(transaction_id, "DISCARD"),
-            encode(ValueError("DISCARD without MULTI")),
+            [encode(ValueError("DISCARD without MULTI"))],
         )
 
     @unittest.expectedFailure
@@ -584,10 +584,14 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(decode(await REPLCONF().execute()), "OK")
 
     async def test_psync(self):
+        payloads = await PSYNC().execute()
+
         self.assertEqual(
-            decode(await PSYNC().execute()),
+            decode(payloads[0]),
             "FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0",
         )
+        
+        self.assertIsNotNone(payloads[1])
 
 
 if __name__ == "__main__":

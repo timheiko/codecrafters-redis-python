@@ -30,6 +30,16 @@ class CommandRegistry:
 
     async def execute(
         self, transaction_id: int, command: str, *args: list[str]
+    ) -> list[bytes]:
+        response = await self.__execute(transaction_id, command, *args)
+        match response:
+            case [*payloads]:
+                return payloads
+            case bytes(payload):
+                return [payload]
+
+    async def __execute(
+        self, transaction_id: int, command: str, *args: list[str]
     ) -> bytes:
         cmd = command.upper()
         if cmd in self:
@@ -83,7 +93,7 @@ class RedisCommand(ABC):
         """
 
     @abstractmethod
-    async def execute(self) -> bytes:
+    async def execute(self) -> bytes | list[bytes]:
         """
         Executes the command and returns bytes to be sent to client
         """
@@ -620,5 +630,12 @@ class PSYNC(RedisCommand):
     def __init__(self, *_args: list[str]):
         pass
 
-    async def execute(self) -> bytes:
-        return encode_simple("FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0")
+    async def execute(self) -> list[bytes]:
+        return [
+            encode_simple("FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0"),
+            encode(
+                bytes.fromhex(
+                    "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
+                )
+            ),
+        ]

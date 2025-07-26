@@ -4,7 +4,7 @@ from asyncio import StreamReader, StreamWriter
 from app.args import Args, parse_args
 from app.command import registry
 
-from app.resp import decode, encode, encode_simple
+from app.resp import decode, encode
 from app.log import log
 
 
@@ -24,10 +24,20 @@ async def handshake(args: Args):
         host, port = args.replicaof.split()
         log("handshake started", host, port)
         reader, writer = await asyncio.open_connection(host, port)
-        writer.write(encode(["PING"]))
-        await writer.drain()
-        response = decode(await reader.read(1024))
-        log("handshake response", response)
+
+        handshake_commands = [
+            "PING",
+            f"REPLCONF listening-port {args.port}",
+            "REPLCONF capa psync2",
+        ]
+        for cmd in handshake_commands:
+            cmd_items = cmd.split()
+            log("handshake stage request:", cmd_items)
+            writer.write(encode(cmd_items))
+            await writer.drain()
+            response = decode(await reader.read(1024))
+            log("handshake stage response:", response)
+
         writer.close()
         await writer.wait_closed()
         log("handshake finished")

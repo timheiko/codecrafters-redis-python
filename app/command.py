@@ -575,12 +575,14 @@ class INFO(RedisCommand):
     async def execute(self):
         match self.info:
             case self.REPLICATION:
-                if parse_args().replicaof:
-                    return encode("\n".join(
-                        [
-                            "role:slave",
-                        ]
-                    ))
+                if not parse_args().is_master():
+                    return encode(
+                        "\n".join(
+                            [
+                                "role:slave",
+                            ]
+                        )
+                    )
                 return encode(
                     "\n".join(
                         [

@@ -8,6 +8,9 @@ class Args:
     port: int = 6379
     replicaof: str | None = None
 
+    def is_master(self) -> bool:
+        return self.replicaof is None
+
 
 def parse_args() -> Args:
     argparser = argparse.ArgumentParser()

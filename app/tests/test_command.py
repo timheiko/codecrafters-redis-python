@@ -15,6 +15,7 @@ from app.command import (
     LRANGE,
     MULTI,
     PING,
+    REPLCONF,
     RPUSH,
     SET,
     TYPE,
@@ -24,7 +25,7 @@ from app.command import (
     CommandRegistry,
 )
 
-from app.resp import encode, encode_simple
+from app.resp import decode, encode, encode_simple
 from app.storage import Stream, storage
 
 
@@ -577,6 +578,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     @unittest.skip
     async def test_info_replication(self):
         self.assertEqual(await INFO("replication").execute(), encode("role:master"))
+
+    async def test_replconf(self):
+        self.assertEqual(decode(await REPLCONF().execute()), "OK")
 
 
 if __name__ == "__main__":

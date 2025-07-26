@@ -594,3 +594,17 @@ class INFO(RedisCommand):
                 )
             case _:
                 raise ValueError
+
+
+@registry.register
+@dataclass
+class REPLCONF(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/replconf/
+    """
+
+    def __init__(self, *_args: list[str]):
+        pass
+
+    async def execute(self):
+        return encode_simple("OK")

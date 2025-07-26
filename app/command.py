@@ -608,3 +608,17 @@ class REPLCONF(RedisCommand):
 
     async def execute(self):
         return encode_simple("OK")
+
+
+@registry.register
+@dataclass
+class PSYNC(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/psync/
+    """
+
+    def __init__(self, *_args: list[str]):
+        pass
+
+    async def execute(self) -> bytes:
+        return encode_simple("FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0")

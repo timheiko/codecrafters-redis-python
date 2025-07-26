@@ -15,6 +15,7 @@ from app.command import (
     LRANGE,
     MULTI,
     PING,
+    PSYNC,
     REPLCONF,
     RPUSH,
     SET,
@@ -581,6 +582,12 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
     async def test_replconf(self):
         self.assertEqual(decode(await REPLCONF().execute()), "OK")
+
+    async def test_psync(self):
+        self.assertEqual(
+            decode(await PSYNC().execute()),
+            "FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0",
+        )
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from app.command import (
     XRANGE,
     XREAD,
     CommandRegistry,
+    Context,
 )
 
 from app.resp import decode, encode, encode_simple
@@ -52,25 +53,27 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(EXEC)
 
         transaction_id = 1
+        context = Context()
 
         self.assertEqual(
-            await registry.execute(transaction_id, "MULTI"), [encode_simple("OK")]
+            await registry.execute(transaction_id, context, "MULTI"),
+            [encode_simple("OK")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, "SET", "foo", "bar"),
+            await registry.execute(transaction_id, context, "SET", "foo", "bar"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, "GET", "foo"),
+            await registry.execute(transaction_id, context, "GET", "foo"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, "EXEC"),
+            await registry.execute(transaction_id, context, "EXEC"),
             [encode(["OK", "bar"])],
         )
 
         self.assertEqual(
-            await registry.execute(transaction_id, "GET", "foo"),
+            await registry.execute(transaction_id, context, "GET", "foo"),
             [encode("bar")],
         )
 
@@ -82,7 +85,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         transaction_id = 1
 
         self.assertEqual(
-            await registry.execute(transaction_id, "EXEC"),
+            await registry.execute(transaction_id, Context(), "EXEC"),
             [encode(ValueError("EXEC without MULTI"))],
         )
 
@@ -94,20 +97,21 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
-
+        context = Context()
         self.assertEqual(
-            await registry.execute(transaction_id, "MULTI"), [encode_simple("OK")]
+            await registry.execute(transaction_id, context, "MULTI"),
+            [encode_simple("OK")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, "SET", "foo", "bar"),
+            await registry.execute(transaction_id, context, "SET", "foo", "bar"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, "GET", "foo"),
+            await registry.execute(transaction_id, context, "GET", "foo"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, "DISCARD"),
+            await registry.execute(transaction_id, context, "DISCARD"),
             [encode_simple("OK")],
         )
 
@@ -117,9 +121,10 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
+        context = Context()
 
         self.assertEqual(
-            await registry.execute(transaction_id, "DISCARD"),
+            await registry.execute(transaction_id, context, "DISCARD"),
             [encode(ValueError("DISCARD without MULTI"))],
         )
 

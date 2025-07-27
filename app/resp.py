@@ -109,3 +109,12 @@ def decode_bulk_string(payload: bytes, offset: int) -> tuple[bytes, int]:
             return (content, content_end)
 
     raise Exception(f"Cannot parse text from payload at offset {offset}: {payload}")
+
+
+def decode_commands(data: bytes):
+    n, offset, commands = len(data), 0, []
+    while offset < n:
+        command, next_offset = __decode(data, offset)
+        commands.append((command, next_offset - offset))
+        offset = next_offset
+    return commands

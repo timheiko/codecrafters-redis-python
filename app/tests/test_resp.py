@@ -1,5 +1,5 @@
 import unittest
-from ..resp import decode, decode_bulk_string, encode, encode_simple
+from ..resp import decode, decode_bulk_string, decode_commands, encode, encode_simple
 
 
 class RespTest(unittest.TestCase):
@@ -87,6 +87,28 @@ class RespTest(unittest.TestCase):
             decode(b"*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n456\r\n"),
             ["SET", "bar", "456"],
         ),
+
+    def test_decode_commands_ping(self):
+        data = b"*1\r\n$4\r\nPING\r\n"
+
+        self.assertEqual(decode_commands(data), [(["PING"], 14)])
+
+    def test_decode_commands_replconf(self):
+        data = b"*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n"
+
+        self.assertEqual(decode_commands(data), [(["REPLCONF", "GETACK", "*"], 37)])
+
+    def test_decode_commands_batch(self):
+        batch = b"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n456\r\n*3\r\n$3\r\nSET\r\n$3\r\nbaz\r\n$3\r\n789\r\n"
+        self.assertEqual(
+            decode_commands(batch),
+            [
+                (["SET", "foo", "123"], 31),
+                (["SET", "bar", "456"], 31),
+                (["SET", "baz", "789"], 31),
+            ],
+            batch,
+        )
 
 
 if __name__ == "__main__":

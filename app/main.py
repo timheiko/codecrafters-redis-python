@@ -2,9 +2,9 @@ import asyncio
 from asyncio import StreamReader, StreamWriter
 
 from app.args import Args, parse_args
-from app.command import GET, INFO, PSYNC, SET, registry
+from app.command import GET, INFO, PSYNC, SET, Context, registry
 
-from app.resp import decode, encode
+from app.resp import decode, decode_commands, encode
 from app.log import log
 
 
@@ -12,16 +12,25 @@ config: Args = parse_args()
 replicas = []
 
 
+context = Context(is_master=config.is_master())
+
+
 async def execute_command(
-    reader: StreamReader, writer: StreamWriter, command: list[str] | str
+    reader: StreamReader,
+    writer: StreamWriter,
+    command: list[str] | str,
+    *,
+    offset_delta: int = 0,
 ):
     log("command", command)
     match command:
         case [cmd, *args]:
             log(f"cmd {cmd} args: {args}")
-            payloads = await registry.execute(id(writer), cmd, *args)
+            payloads = await registry.execute(id(writer), context, cmd, *args)
             if registry[cmd] != SET or config.is_master():
-                writer.write(b"".join(payloads))
+                payload = b"".join(payloads)
+                log("payload >>>", payload)
+                writer.write(payload)
                 await writer.drain()
 
             if registry[cmd] == PSYNC:
@@ -31,20 +40,18 @@ async def execute_command(
                 for _, w in replicas:
                     w.write(encode(command))
                     await w.drain()
+
+            context.offset += offset_delta
         case _:
             pass
 
 
 async def handle_connection(reader: StreamReader, writer: StreamWriter):
     while len(data := await reader.read(1024)) > 0:
-        commands = decode(data)
+        commands = decode_commands(data)
         log("commands", commands)
-        match commands:
-            case [str(_), *_]:
-                await execute_command(reader, writer, commands)
-            case [[_], *_]:
-                for command in commands:
-                    await execute_command(reader, writer, command)
+        for command, offset_delta in commands:
+            await execute_command(reader, writer, command, offset_delta=offset_delta)
 
 
 async def handle_commands(reader: StreamReader, writer: StreamWriter):
@@ -75,10 +82,8 @@ async def handshake():
             responses = decode(await reader.read(1024))
             log("handshake stage response:", responses)
             for response in responses:
-                log("response", response)
                 match response:
                     case [_, *_]:
-                        log("response", type(response), response)
                         await execute_command(reader, writer, response)
 
         log("handshake finished")

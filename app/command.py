@@ -3,13 +3,19 @@ import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, ClassVar
+from typing import Callable, ClassVar, Self
 
 from app.args import parse_args
 from app.log import log
 from app.resp import decode, encode, encode_simple
 
 from app.storage import Stream, StreamEntry, storage
+
+
+@dataclass
+class Context:
+    offset: int = 0
+    is_master: bool = False
 
 
 class CommandRegistry:
@@ -29,10 +35,10 @@ class CommandRegistry:
         return cls
 
     async def execute(
-        self, transaction_id: int, command: str, *args: list[str]
+        self, transaction_id: int, context: Context, command: str, *args: list[str]
     ) -> list[bytes]:
-        log("execute", command, args)
-        response = await self.__execute(transaction_id, command, *args)
+        log("execute", command, type(args), args)
+        response = await self.__execute(transaction_id, context, command, *args)
         match response:
             case [*payloads]:
                 return payloads
@@ -40,15 +46,16 @@ class CommandRegistry:
                 return [payload]
 
     async def __execute(
-        self, transaction_id: int, command: str, *args: list[str]
+        self, transaction_id: int, context: Context, command: str, *args: list[str]
     ) -> bytes:
         cmd = command.upper()
         if cmd in self:
             cmd_class = self[cmd]
+            cmd_instance = cmd_class(*args).set_context(context)
             if cmd_class == MULTI:
                 self.__transactions[transaction_id] = []
 
-                return await cmd_class(*args).execute()
+                return await cmd_instance.execute()
             elif cmd_class == EXEC:
                 if transaction_id not in self.__transactions:
                     return encode(ValueError("EXEC without MULTI"))
@@ -66,12 +73,12 @@ class CommandRegistry:
 
                 del self.__transactions[transaction_id]
 
-                return await cmd_class(*args).execute()
+                return await cmd_instance.execute()
             elif transaction_id in self.__transactions:
                 self.__transactions[transaction_id].append(cmd_class(*args))
                 return encode_simple("QUEUED")
             else:
-                return await cmd_class(*args).execute()
+                return await cmd_instance.execute()
         raise Exception(f"Unknown command: {command}")
 
     def __getitem__(self, key):
@@ -87,11 +94,17 @@ waiting_queue = defaultdict(deque)
 
 
 class RedisCommand(ABC):
+    context: Context | None = None
+
     @abstractmethod
     def __init__(self, args: list[str]):
         """
         Instantiates a given command from arguments
         """
+
+    def set_context(self, context: Context) -> Self:
+        self.context = context
+        return self
 
     @abstractmethod
     async def execute(self) -> bytes | list[bytes]:
@@ -106,7 +119,9 @@ class PING(RedisCommand):
         pass
 
     async def execute(self):
-        return encode_simple("PONG")
+        if self.context is None or self.context.is_master:
+            return encode_simple("PONG")
+        return []
 
 
 @registry.register
@@ -624,8 +639,11 @@ class REPLCONF(RedisCommand):
                 self.is_get_ack = kind.upper() == "GETACK"
 
     async def execute(self):
+        log(self.__class__, self.is_get_ack)
         if self.is_get_ack:
-            return encode("REPLCONF ACK 0".split())
+            if self.context is None:
+                return encode("REPLCONF ACK 0".split())
+            return encode(f"REPLCONF ACK {self.context.offset}".split())
         return encode_simple("OK")
 
 

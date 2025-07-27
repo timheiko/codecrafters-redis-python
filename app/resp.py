@@ -51,12 +51,15 @@ def decode(payload: bytes):
     decoded = []
     while offset < n:
         item, offset = __decode(payload, offset)
+        if offset == n and not len(decoded):
+            return item
         decoded.append(item)
     return decoded
 
 
 def __decode(payload: bytes, offset: int = 0) -> tuple[any, int]:
-    log("payload <<<", payload)
+    if offset == 0:
+        log("payload <<<", payload)
     i = offset
     match payload[i : i + 1]:
         case b"*":
@@ -94,9 +97,15 @@ def decode_bulk_string(payload: bytes, offset: int) -> tuple[bytes, int]:
     if payload[offset : offset + 1] == "$".encode():
         new_line_sep_pos = payload.find(LINE_SEPARATOR, offset + 1)
         length = int(payload[offset + 1 : new_line_sep_pos])
-        text_start = new_line_sep_pos + len(LINE_SEPARATOR)
-        text_end = text_start + length
-        text = payload[text_start:text_end].decode()
-        return (text, text_end + len(LINE_SEPARATOR))
+        content_start = new_line_sep_pos + len(LINE_SEPARATOR)
+        content_end = content_start + length
+        content = payload[content_start:content_end]
+        try:
+            text = content.decode()
+            return (text, content_end + len(LINE_SEPARATOR))
+        except UnicodeDecodeError as e:
+            log("it must be RDB!", e)
+            log("content length >>>", length, content)
+            return (content, content_end)
 
     raise Exception(f"Cannot parse text from payload at offset {offset}: {payload}")

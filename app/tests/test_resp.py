@@ -44,21 +44,21 @@ class RespTest(unittest.TestCase):
             decode(
                 b"*7\r\n$5\r\nRPUSH\r\n$9\r\nlist_key2\r\n$1\r\na\r\n$1\r\nb\r\n$1\r\nc\r\n$1\r\nd\r\n$1\r\ne\r\n"
             ),
-            [["RPUSH", "list_key2", "a", "b", "c", "d", "e"]],
+            ["RPUSH", "list_key2", "a", "b", "c", "d", "e"],
         )
 
     def test_decode_simple_string(self):
-        self.assertEqual(decode(encode_simple("OK")), ["OK"])
+        self.assertEqual(decode(encode_simple("OK")), "OK")
 
     def test_decode_int(self):
-        self.assertEqual(decode(encode(2)), [2])
+        self.assertEqual(decode(encode(2)), 2)
 
     def test_decode_bulk_string(self):
-        self.assertEqual(decode(encode("value")), ["value"])
+        self.assertEqual(decode(encode("value")), "value")
 
     def test_decode_error(self):
         self.assertEqual(
-            decode(encode(ValueError("error message")))[0].args,
+            decode(encode(ValueError("error message"))).args,
             ValueError("error message").args,
         )
 
@@ -69,6 +69,24 @@ class RespTest(unittest.TestCase):
             [["SET", "foo", "123"], ["SET", "bar", "456"], ["SET", "baz", "789"]],
             batch,
         )
+
+    def test_decode_command_batch_with_rdb(self):
+        batch = b"+FULLRESYNC 75cd7bc10c49047e0d163660f3b90625b1af31dc 0\r\n$88\r\nREDIS0011\xfa\tredis-ver\x057.2.0\xfa\nredis-bits\xc0@\xfa\x05ctime\xc2m\x08\xbce\xfa\x08used-mem\xc2\xb0\xc4\x10\x00\xfa\x08aof-base\xc0\x00\xff\xf0n;\xfe\xc0\xffZ\xa2*3\r\n$8\r\nREPLCONF\r\n$6\r\nGETACK\r\n$1\r\n*\r\n"
+        self.assertEqual(
+            decode(batch),
+            [
+                "FULLRESYNC 75cd7bc10c49047e0d163660f3b90625b1af31dc 0",
+                b"REDIS0011\xfa\tredis-ver\x057.2.0\xfa\nredis-bits\xc0@\xfa\x05ctime\xc2m\x08\xbce\xfa\x08used-mem\xc2\xb0\xc4\x10\x00\xfa\x08aof-base\xc0\x00\xff\xf0n;\xfe\xc0\xffZ\xa2",
+                ["REPLCONF", "GETACK", "*"],
+            ],
+            batch,
+        )
+
+    def test_decode_set(self):
+        self.assertEqual(
+            decode(b"*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n456\r\n"),
+            ["SET", "bar", "456"],
+        ),
 
 
 if __name__ == "__main__":

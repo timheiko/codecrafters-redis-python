@@ -31,6 +31,7 @@ class CommandRegistry:
     async def execute(
         self, transaction_id: int, command: str, *args: list[str]
     ) -> list[bytes]:
+        log("execute", command, args)
         response = await self.__execute(transaction_id, command, *args)
         match response:
             case [*payloads]:
@@ -53,7 +54,7 @@ class CommandRegistry:
                     return encode(ValueError("EXEC without MULTI"))
 
                 responses = [
-                    decode(await cmd.execute())[0]
+                    decode(await cmd.execute())
                     for cmd in self.__transactions[transaction_id]
                 ]
                 del self.__transactions[transaction_id]
@@ -613,10 +614,18 @@ class REPLCONF(RedisCommand):
     https://redis.io/docs/latest/commands/replconf/
     """
 
-    def __init__(self, *_args: list[str]):
-        pass
+    is_get_ack: bool = False
+
+    def __init__(self, *args: list[str]):
+        match [arg.upper() for arg in args]:
+            case []:
+                pass
+            case [kind, *_]:
+                self.is_get_ack = kind.upper() == "GETACK"
 
     async def execute(self):
+        if self.is_get_ack:
+            return encode("REPLCONF ACK 0".split())
         return encode_simple("OK")
 
 

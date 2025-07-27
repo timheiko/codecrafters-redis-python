@@ -581,14 +581,20 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await INFO("replication").execute(), encode("role:master"))
 
     async def test_replconf(self):
-        self.assertEqual(decode(await REPLCONF().execute()), ["OK"])
+        self.assertEqual(decode(await REPLCONF().execute()), "OK")
+
+    async def test_replconf_getack(self):
+        self.assertEqual(
+            decode(await REPLCONF(*"GETACK 0".split()).execute()),
+            "REPLCONF ACK 0".split(),
+        )
 
     async def test_psync(self):
         payloads = await PSYNC().execute()
 
         self.assertEqual(
             decode(payloads[0]),
-            ["FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0"],
+            "FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0",
         )
 
         self.assertIsNotNone(payloads[1])

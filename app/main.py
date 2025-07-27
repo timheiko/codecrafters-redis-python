@@ -12,11 +12,13 @@ config: Args = parse_args()
 replicas = []
 
 
-async def execute_command(reader: StreamReader, writer: StreamWriter):
-    while len(data := await reader.read(1024)) > 0:
-        for command in decode(data):
-            cmd, *args = command
-            log(f"command {cmd} args: {args}")
+async def execute_command(
+    reader: StreamReader, writer: StreamWriter, command: list[str] | str
+):
+    log("command", command)
+    match command:
+        case [cmd, *args]:
+            log(f"cmd {cmd} args: {args}")
             payloads = await registry.execute(id(writer), cmd, *args)
             if registry[cmd] != SET or config.is_master():
                 writer.write(b"".join(payloads))
@@ -27,12 +29,26 @@ async def execute_command(reader: StreamReader, writer: StreamWriter):
 
             if registry[cmd] == SET:
                 for _, w in replicas:
-                    w.write(data)
+                    w.write(encode(command))
                     await w.drain()
+        case _:
+            pass
+
+
+async def handle_connection(reader: StreamReader, writer: StreamWriter):
+    while len(data := await reader.read(1024)) > 0:
+        commands = decode(data)
+        log("commands", commands)
+        match commands:
+            case [str(_), *_]:
+                await execute_command(reader, writer, commands)
+            case [[_], *_]:
+                for command in commands:
+                    await execute_command(reader, writer, command)
 
 
 async def handle_commands(reader: StreamReader, writer: StreamWriter):
-    await execute_command(reader, writer)
+    await handle_connection(reader, writer)
 
     if (reader, writer) not in replicas:
         writer.close()
@@ -56,21 +72,21 @@ async def handshake():
             log("handshake stage request:", cmd_items)
             writer.write(encode(cmd_items))
             await writer.drain()
-            try:
-                response = decode(await reader.read(1024))
-                log("handshake stage response:", response)
-            except UnicodeDecodeError as e:
-                log("fix me!", e)
-
-        # rdb = await reader.read(1024)
-        # log("rdb", rdb)
+            responses = decode(await reader.read(1024))
+            log("handshake stage response:", responses)
+            for response in responses:
+                log("response", response)
+                match response:
+                    case [_, *_]:
+                        log("response", type(response), response)
+                        await execute_command(reader, writer, response)
 
         log("handshake finished")
-        await execute_command(reader, writer)
+        await handle_connection(reader, writer)
 
 
 async def main():
-    server = await asyncio.start_server(handle_commands, "localhost", config.port)
+    server = await asyncio.start_server(handle_connection, "localhost", config.port)
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
     log(f"Serving on {addrs}")

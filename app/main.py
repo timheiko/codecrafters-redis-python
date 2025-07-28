@@ -2,7 +2,7 @@ import asyncio
 from asyncio import StreamReader, StreamWriter
 
 from app.args import Args, parse_args
-from app.command import GET, INFO, PSYNC, SET, Context, registry
+from app.command import PSYNC, Context, registry
 
 from app.resp import decode, decode_commands, encode
 from app.log import log
@@ -20,24 +20,18 @@ async def execute_command(
     *,
     offset_delta: int = 0,
 ):
-    log("command", command)
+    log("command", command, id(reader))
     match command:
         case [cmd, *args]:
-            log(f"cmd {cmd} args: {args}")
             payloads = await registry.execute(id(writer), context, cmd, *args)
-            if registry[cmd] != SET or config.is_master():
-                payload = b"".join(payloads)
-                log("payload >>>", payload)
-                writer.write(payload)
-                await writer.drain()
+            payload = b"".join(payloads)
+            log("payload >>>", payload)
+            writer.write(payload)
+            await writer.drain()
 
             if registry[cmd] == PSYNC:
                 context.replicas.append((reader, writer))
-
-            if registry[cmd] == SET:
-                for _, w in context.replicas:
-                    w.write(encode(command))
-                    await w.drain()
+                await asyncio.sleep(3_000)
 
             context.offset += offset_delta
         case _:

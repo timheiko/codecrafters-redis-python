@@ -586,6 +586,11 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_info_replication(self):
         self.assertEqual(await INFO("replication").execute(), encode("role:master"))
 
+    async def test_replconf_replica_ports(self):
+        context = Context()
+        REPLCONF(*"listening-port 6767".split()).set_context(context)
+        self.assertIn(6767, context.replica_ports)
+
     async def test_replconf(self):
         self.assertEqual(decode(await REPLCONF().execute()), "OK")
 
@@ -606,7 +611,18 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(payloads[1])
 
     async def test_wait_0_60000(self):
-        self.assertEqual(await WAIT().execute(), encode(0))
+        cmd = WAIT(*"5 0".split())
+
+        self.assertEqual(cmd.minreplicas, 5)
+        self.assertIsNone(cmd.timeout)
+
+    async def test_wait_0_60000(self):
+        cmd = WAIT(*"0 60000".split())
+
+        self.assertEqual(cmd.min_replicas, 0)
+        self.assertEqual(cmd.timeout, 60)
+
+        self.assertEqual(await cmd.execute(), encode(0))
 
 
 if __name__ == "__main__":

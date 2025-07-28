@@ -3,7 +3,7 @@ import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable, ClassVar, Self
+from typing import Callable, ClassVar, Mapping, Self
 
 from app.args import parse_args
 from app.log import log
@@ -17,6 +17,8 @@ class Context:
     offset: int = 0
     is_master: bool = False
     replicas: list[any] = field(default_factory=list)
+    replica_ports: set[any] = field(default_factory=set)
+    need_preplica_ack: bool = False
 
 
 class CommandRegistry:
@@ -91,7 +93,7 @@ class CommandRegistry:
 
 registry = CommandRegistry()
 
-waiting_queue = defaultdict(deque)
+waiting_queue: Mapping[str, asyncio.Future] = defaultdict(deque)
 
 
 class RedisCommand(ABC):
@@ -106,6 +108,9 @@ class RedisCommand(ABC):
     def set_context(self, context: Context) -> Self:
         self.context = context
         return self
+
+    def has_context(self) -> bool:
+        return self.context is not None
 
     @abstractmethod
     async def execute(self) -> bytes | list[bytes]:
@@ -143,8 +148,11 @@ class SET(RedisCommand):
     key: str
     value: any
     ttlms: float | None
+    args: list[str]
 
     def __init__(self, *args: list[str]):
+        self.args = args
+
         match args:
             case [key, value, *rest]:
                 self.key = key
@@ -171,7 +179,17 @@ class SET(RedisCommand):
             storage.set(self.key, self.value, self.ttlms)
         else:
             storage.set(self.key, self.value)
-        return encode_simple("OK")
+
+        if self.has_context():
+            self.context.need_preplica_ack = len(self.context.replicas) > 0
+
+            for _, writer in self.context.replicas:
+                writer.write(encode(["SET", *self.args]))
+                await writer.drain()
+
+        if not self.has_context() or self.context.is_master:
+            return encode_simple("OK")
+        return b""
 
 
 @registry.register
@@ -487,7 +505,6 @@ class XREAD(RedisCommand):
                     [entry.idx, list(entry.field_values)]
                     for entry in storage.get_stream(key).entries
                     if ts < entry.ts and start < entry.idx
-                    # if start < entry.idx
                 ],
             ]
             for key, start in self.queries
@@ -509,8 +526,11 @@ async def join_waiting_list(
 
 async def notify_waiting_list(key: str, times: int) -> None:
     for _ in range(times):
-        if len(waiting_queue[key]) > 0:
-            waiting_queue[key].popleft().set_result(True)
+        while len(waiting_queue[key]) > 0:
+            future = waiting_queue[key].popleft()
+            if not future.cancelled() and not future.done():
+                future.set_result(True)
+                break
 
 
 @registry.register
@@ -631,13 +651,22 @@ class REPLCONF(RedisCommand):
     """
 
     is_get_ack: bool = False
+    port: int | None = None
 
     def __init__(self, *args: list[str]):
         match [arg.upper() for arg in args]:
             case []:
                 pass
-            case [kind, *_]:
-                self.is_get_ack = kind.upper() == "GETACK"
+            case ["LISTENING-PORT", port]:
+                self.port = int(port)
+            case ["GETACK", *_]:
+                self.is_get_ack = True
+
+    def set_context(self, context):
+        if self.port is not None:
+            context.replica_ports.add(self.port)
+
+        return super().set_context(context)
 
     async def execute(self):
         log(self.__class__, self.is_get_ack)
@@ -676,10 +705,46 @@ class WAIT(RedisCommand):
     https://redis.io/docs/latest/commands/wait/
     """
 
-    def __init__(*_args: list[str]):
-        pass
+    min_replicas: int
+    timeout: float
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [min_replicas, timeout]:
+                self.min_replicas = int(min_replicas)
+                self.timeout = float(timeout) / 1_000 if float(timeout) != 0 else None
 
     async def execute(self):
-        if self.context is not None:
-            return encode(len(self.context.replicas))
+        if self.has_context():
+            if not self.context.need_preplica_ack:
+                return encode(len(self.context.replicas))
+
+            self.context.need_preplica_ack = False
+
+            if len(self.context.replicas) == 0:
+                return encode(0)
+
+            async def wait_for_acknolegement(reader, writer):
+                writer.write(encode("REPLCONF GETACK *".split()))
+                await writer.drain()
+                log("waiting for ack", id(reader))
+                ack = await reader.read(1024)
+                log("received ack", id(reader), ack)
+
+            loop = asyncio.get_event_loop()
+            tasks = set(
+                loop.create_task(wait_for_acknolegement(r, w))
+                for r, w in self.context.replicas
+            )
+            finished_tasks, _pending_tasks = await asyncio.wait(
+                tasks,
+                timeout=self.timeout,
+                return_when=asyncio.ALL_COMPLETED,
+            )
+            for task in _pending_tasks:
+                task.cancel()
+
+            return encode(
+                len([task for task in finished_tasks if not task.cancelled()])
+            )
         return encode(0)

@@ -666,3 +666,17 @@ class PSYNC(RedisCommand):
                 )
             ),
         ]
+
+
+@registry.register
+@dataclass
+class WAIT(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/wait/
+    """
+
+    def __init__(*_args: list[str]):
+        pass
+
+    async def execute(self):
+        return encode(0)

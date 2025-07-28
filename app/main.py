@@ -84,7 +84,9 @@ async def handshake():
             for response in responses:
                 match response:
                     case [_, *_]:
-                        await execute_command(reader, writer, response)
+                        await execute_command(
+                            reader, writer, response, offset_delta=len(encode(response))
+                        )
 
         log("handshake finished")
         await handle_connection(reader, writer)

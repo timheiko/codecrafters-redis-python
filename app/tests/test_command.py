@@ -20,6 +20,7 @@ from app.command import (
     RPUSH,
     SET,
     TYPE,
+    WAIT,
     XADD,
     XRANGE,
     XREAD,
@@ -603,6 +604,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertIsNotNone(payloads[1])
+
+    async def test_wait_0_60000(self):
+        self.assertEqual(await WAIT().execute(), encode(0))
 
 
 if __name__ == "__main__":

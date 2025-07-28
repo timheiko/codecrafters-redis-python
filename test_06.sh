@@ -92,3 +92,5 @@ redis-cli discard
 redis-cli discard
 
 redis-cli info replication
+
+redis-cli WAIT 0 60000

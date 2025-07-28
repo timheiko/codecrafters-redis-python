@@ -9,8 +9,6 @@ from app.log import log
 
 
 config: Args = parse_args()
-replicas = []
-
 
 context = Context(is_master=config.is_master())
 
@@ -34,10 +32,10 @@ async def execute_command(
                 await writer.drain()
 
             if registry[cmd] == PSYNC:
-                replicas.append((reader, writer))
+                context.replicas.append((reader, writer))
 
             if registry[cmd] == SET:
-                for _, w in replicas:
+                for _, w in context.replicas:
                     w.write(encode(command))
                     await w.drain()
 
@@ -57,7 +55,7 @@ async def handle_connection(reader: StreamReader, writer: StreamWriter):
 async def handle_commands(reader: StreamReader, writer: StreamWriter):
     await handle_connection(reader, writer)
 
-    if (reader, writer) not in replicas:
+    if (reader, writer) not in context.replicas:
         writer.close()
         await writer.wait_closed()
 

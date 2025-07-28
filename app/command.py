@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import asyncio
 from collections import defaultdict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, ClassVar, Self
 
@@ -16,6 +16,7 @@ from app.storage import Stream, StreamEntry, storage
 class Context:
     offset: int = 0
     is_master: bool = False
+    replicas: list[any] = field(default_factory=list)
 
 
 class CommandRegistry:
@@ -679,4 +680,6 @@ class WAIT(RedisCommand):
         pass
 
     async def execute(self):
+        if self.context is not None:
+            return encode(len(self.context.replicas))
         return encode(0)

@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 import asyncio
+from io import BufferedRandom
+from os import path
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -776,3 +778,101 @@ class CONFIG(RedisCommand):
             configs.extend([self.DBFILENAME, self.context.args.dbfilename])
 
         return encode(configs)
+
+
+@registry.register
+@dataclass
+class KEYS(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/keys/
+    """
+
+    pattern: str
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [pattern]:
+                self.pattern = pattern
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        def read_int(file: BufferedRandom, count: int) -> int:
+            return int.from_bytes(file.read(count), byteorder="big")
+
+        def read_size(file: BufferedRandom) -> int:
+            first_byte = read_int(file, 1)
+            match first_byte >> 6:
+                case 0:
+                    return first_byte
+                case 1:
+                    return ((first_byte & 0x5F) << 8) | read_int(file, 1)
+                case 2:
+                    return read_int(file, 4)
+                case 3:
+                    last_six_bits = first_byte & 0x3F
+                    match last_six_bits:
+                        case 0:
+                            return -1
+                        case 1:
+                            return -2
+                        case 2:
+                            return -4
+                        case _:
+                            raise ValueError(f"Unknown special format {last_six_bits}")
+
+        def read_var_length_value(file: BufferedRandom) -> any:
+            size = read_size(file)
+            match size:
+                case -1:
+                    return read_int(file, 1)
+                case -2:
+                    return read_int(file, 2)
+                case -4:
+                    return read_int(file, 4)
+                case _:
+                    value = file.read(size)
+                    return value
+
+        def read_key_value(file: BufferedRandom) -> tuple[str, any]:
+            value_type = file.read(1)
+            key = read_var_length_value(file)
+            match value_type:
+                case b"\x00":  # string
+                    return (key, read_var_length_value(file))
+                case _:
+                    raise ValueError(f"Unknown value type: {value_type}")
+
+        rdbpath = path.join(self.context.args.dir, self.context.args.dbfilename)
+        keys = []
+        with open(rdbpath, "b+r") as file:
+            file.seek(9)  # 5 bytes magic string "REDIS" + 4 bytes version string
+
+            while len(opcode := file.read(1)) > 0:
+                match opcode:
+                    case b"\xff":
+                        break
+                    case b"\xfe":
+                        _db_num = read_int(file, 1)
+                    case b"\xfd":
+                        _exp = int.from_bytes(file.read(4), byteorder="little")
+                        key, _value = read_key_value(file)
+                        keys.append(key)
+                    case b"\xfc":
+                        _exp = int.from_bytes(file.read(8), byteorder="little")
+                        key, _value = read_key_value(file)
+                        keys.append(key)
+                    case b"\xfb":
+                        _hash_table_size = read_size(file)
+                        _hash_table_size_exp = read_size(file)
+                    case b"\xfa":
+                        key = read_var_length_value(file)
+                        _val = read_var_length_value(file)
+                    case b"\x00":
+                        key = read_var_length_value(file)
+                        _val = read_var_length_value(file)
+                        keys.append(key)
+                    case _:
+                        raise ValueError(opcode)
+
+        return encode([key.decode() for key in keys])

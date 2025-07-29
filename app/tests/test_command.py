@@ -1,4 +1,6 @@
 import asyncio
+from os import path
+from tempfile import NamedTemporaryFile
 import unittest
 
 from app.args import Args
@@ -11,6 +13,7 @@ from app.command import (
     GET,
     INCR,
     INFO,
+    KEYS,
     LLEN,
     LPOP,
     LPUSH,
@@ -654,6 +657,14 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             await cmd.execute(),
             encode(["dir", args.dir, "dbfilename", args.dbfilename]),
         )
+
+    async def test_reading_keys_star_foo_bar(self):
+        rdb_path = "dumps/foo-bar.rdb"
+        args = Args()
+        args.dir, args.dbfilename = path.dirname(rdb_path), path.basename(rdb_path)
+
+        cmd = KEYS("*").set_context(Context(args))
+        self.assertEqual(await cmd.execute(), encode(["foo"]))
 
 
 if __name__ == "__main__":

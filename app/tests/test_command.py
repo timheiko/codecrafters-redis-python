@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 
+from app.args import Args
 from app.command import (
     BLPOP,
     DISCARD,
@@ -54,7 +55,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(EXEC)
 
         transaction_id = 1
-        context = Context()
+        context = Context(Args())
 
         self.assertEqual(
             await registry.execute(transaction_id, context, "MULTI"),
@@ -86,7 +87,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         transaction_id = 1
 
         self.assertEqual(
-            await registry.execute(transaction_id, Context(), "EXEC"),
+            await registry.execute(transaction_id, Context(Args()), "EXEC"),
             [encode(ValueError("EXEC without MULTI"))],
         )
 
@@ -98,7 +99,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
-        context = Context()
+        context = Context(Args())
         self.assertEqual(
             await registry.execute(transaction_id, context, "MULTI"),
             [encode_simple("OK")],
@@ -122,7 +123,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
-        context = Context()
+        context = Context(Args())
 
         self.assertEqual(
             await registry.execute(transaction_id, context, "DISCARD"),
@@ -582,14 +583,30 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_multi(self):
         self.assertEqual(await MULTI().execute(), b"+OK\r\n")
 
-    @unittest.skip
-    async def test_info_replication(self):
-        self.assertEqual(await INFO("replication").execute(), encode("role:master"))
+    async def test_info_replication_master(self):
+        args = Args()
+        context = Context(args)
+        self.assertEqual(
+            await INFO("replication").set_context(context).execute(),
+            encode(
+                "role:master\n"
+                "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\n"
+                "master_repl_offset:0"
+            ),
+        )
+
+    async def test_info_replication_slave(self):
+        args = Args()
+        args.replicaof = "localhost 1234"
+        context = Context(args)
+        self.assertEqual(
+            await INFO("replication").set_context(context).execute(),
+            encode("role:slave"),
+        )
 
     async def test_replconf_replica_ports(self):
-        context = Context()
+        context = Context(Args())
         REPLCONF(*"listening-port 6767".split()).set_context(context)
-        self.assertIn(6767, context.replica_ports)
 
     async def test_replconf(self):
         self.assertEqual(decode(await REPLCONF().execute()), "OK")

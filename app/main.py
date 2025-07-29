@@ -1,16 +1,14 @@
 import asyncio
 from asyncio import StreamReader, StreamWriter
 
-from app.args import Args, parse_args
+from app.args import parse_args
 from app.command import PSYNC, Context, registry
 
 from app.resp import decode, decode_commands, encode
 from app.log import log
 
 
-config: Args = parse_args()
-
-context = Context(is_master=config.is_master())
+context = Context(parse_args())
 
 
 async def execute_command(
@@ -55,14 +53,14 @@ async def handle_commands(reader: StreamReader, writer: StreamWriter):
 
 
 async def handshake():
-    if not config.is_master():
-        host, port = config.replicaof.split()
+    if not context.args.is_master():
+        host, port = context.args.replicaof.split()
         log("handshake started", host, port)
         reader, writer = await asyncio.open_connection(host, port)
 
         handshake_commands = [
             "PING",
-            f"REPLCONF listening-port {config.port}",
+            f"REPLCONF listening-port {context.args.port}",
             "REPLCONF capa psync2",
             "PSYNC ? -1",
         ]
@@ -85,7 +83,9 @@ async def handshake():
 
 
 async def main():
-    server = await asyncio.start_server(handle_connection, "localhost", config.port)
+    server = await asyncio.start_server(
+        handle_connection, "localhost", context.args.port
+    )
 
     addrs = ", ".join(str(sock.getsockname()) for sock in server.sockets)
     log(f"Serving on {addrs}")

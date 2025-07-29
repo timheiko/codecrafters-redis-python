@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, ClassVar, Mapping, Self
 
-from app.args import parse_args
+from app.args import Args
 from app.log import log
 from app.resp import decode, encode, encode_simple
 
@@ -14,11 +14,16 @@ from app.storage import Stream, StreamEntry, storage
 
 @dataclass
 class Context:
-    offset: int = 0
-    is_master: bool = False
-    replicas: list[any] = field(default_factory=list)
-    replica_ports: set[any] = field(default_factory=set)
-    need_preplica_ack: bool = False
+    args: Args
+    offset: int
+    replicas: list[any]
+    need_preplica_ack: bool
+
+    def __init__(self, args: Args, offset: int = 0):
+        self.args = args
+        self.offset = offset
+        self.replicas = []
+        self.need_preplica_ack: bool = False
 
 
 class CommandRegistry:
@@ -125,7 +130,7 @@ class PING(RedisCommand):
         pass
 
     async def execute(self):
-        if self.context is None or self.context.is_master:
+        if self.context is None or self.context.args.is_master():
             return encode_simple("PONG")
         return []
 
@@ -187,7 +192,7 @@ class SET(RedisCommand):
                 writer.write(encode(["SET", *self.args]))
                 await writer.drain()
 
-        if not self.has_context() or self.context.is_master:
+        if not self.has_context() or self.context.args.is_master():
             return encode_simple("OK")
         return b""
 
@@ -622,7 +627,7 @@ class INFO(RedisCommand):
     async def execute(self):
         match self.info:
             case self.REPLICATION:
-                if not parse_args().is_master():
+                if not self.context.args.is_master():
                     return encode(
                         "\n".join(
                             [
@@ -661,12 +666,6 @@ class REPLCONF(RedisCommand):
                 self.port = int(port)
             case ["GETACK", *_]:
                 self.is_get_ack = True
-
-    def set_context(self, context):
-        if self.port is not None:
-            context.replica_ports.add(self.port)
-
-        return super().set_context(context)
 
     async def execute(self):
         log(self.__class__, self.is_get_ack)

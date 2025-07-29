@@ -747,3 +747,32 @@ class WAIT(RedisCommand):
                 len([task for task in finished_tasks if not task.cancelled()])
             )
         return encode(0)
+
+
+@registry.register
+@dataclass
+class CONFIG(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/config-get/
+    """
+
+    params: list[str]
+    DIR: ClassVar[str] = "dir"
+    DBFILENAME: ClassVar[str] = "dbfilename"
+
+    def __init__(self, *args: list[str]):
+        match [arg.lower() for arg in args]:
+            case ["get", *params]:
+                self.params = params
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        configs = []
+
+        if self.DIR in self.params:
+            configs.extend([self.DIR, self.context.args.dir])
+        if self.DBFILENAME in self.params:
+            configs.extend([self.DBFILENAME, self.context.args.dbfilename])
+
+        return encode(configs)

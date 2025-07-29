@@ -4,6 +4,7 @@ import unittest
 from app.args import Args
 from app.command import (
     BLPOP,
+    CONFIG,
     DISCARD,
     ECHO,
     EXEC,
@@ -640,6 +641,19 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cmd.timeout, 60)
 
         self.assertEqual(await cmd.execute(), encode(0))
+
+    async def test_config(self):
+        args = Args()
+        args.dir = "/tmp"
+        args.dbfilename = "dbfilename.rdb"
+        context = Context(args)
+
+        cmd = CONFIG(*"get dir dbfilename".split()).set_context(context)
+
+        self.assertEqual(
+            await cmd.execute(),
+            encode(["dir", args.dir, "dbfilename", args.dbfilename]),
+        )
 
 
 if __name__ == "__main__":

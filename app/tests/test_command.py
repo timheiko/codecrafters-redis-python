@@ -1,6 +1,5 @@
 import asyncio
 from os import path
-from tempfile import NamedTemporaryFile
 import unittest
 
 from app.args import Args
@@ -32,6 +31,7 @@ from app.command import (
     XREAD,
     CommandRegistry,
     Context,
+    Subscriptions,
 )
 
 from app.resp import decode, encode, encode_simple
@@ -61,26 +61,33 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         transaction_id = 1
         context = Context(Args())
+        subscriptions = Subscriptions()
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, "MULTI"),
+            await registry.execute(transaction_id, context, subscriptions, "MULTI"),
             [encode_simple("OK")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, "SET", "foo", "bar"),
+            await registry.execute(
+                transaction_id, context, subscriptions, "SET", "foo", "bar"
+            ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, "GET", "foo"),
+            await registry.execute(
+                transaction_id, context, subscriptions, "GET", "foo"
+            ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, "EXEC"),
+            await registry.execute(transaction_id, context, subscriptions, "EXEC"),
             [encode(["OK", "bar"])],
         )
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, "GET", "foo"),
+            await registry.execute(
+                transaction_id, context, subscriptions, "GET", "foo"
+            ),
             [encode("bar")],
         )
 
@@ -92,7 +99,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         transaction_id = 1
 
         self.assertEqual(
-            await registry.execute(transaction_id, Context(Args()), "EXEC"),
+            await registry.execute(
+                transaction_id, Context(Args()), Subscriptions(), "EXEC"
+            ),
             [encode(ValueError("EXEC without MULTI"))],
         )
 
@@ -105,20 +114,25 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         transaction_id = 1
         context = Context(Args())
+        subscriptions = Subscriptions()
         self.assertEqual(
-            await registry.execute(transaction_id, context, "MULTI"),
+            await registry.execute(transaction_id, context, subscriptions, "MULTI"),
             [encode_simple("OK")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, "SET", "foo", "bar"),
+            await registry.execute(
+                transaction_id, context, subscriptions, "SET", "foo", "bar"
+            ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, "GET", "foo"),
+            await registry.execute(
+                transaction_id, context, subscriptions, "GET", "foo"
+            ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, "DISCARD"),
+            await registry.execute(transaction_id, context, subscriptions, "DISCARD"),
             [encode_simple("OK")],
         )
 
@@ -129,9 +143,10 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         transaction_id = 1
         context = Context(Args())
+        subscriptions = Subscriptions()
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, "DISCARD"),
+            await registry.execute(transaction_id, context, subscriptions, "DISCARD"),
             [encode(ValueError("DISCARD without MULTI"))],
         )
 
@@ -664,8 +679,27 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await KEYS("*").execute(), encode(["foo"]))
 
     async def test_subscribe(self):
+        subscriptions = Subscriptions()
+
         self.assertEqual(
-            await SUBSCRIBE("mychan").execute(), encode(["subscribe", "mychan", 1])
+            await SUBSCRIBE("mychan").set_subscriptions(subscriptions).execute(),
+            encode(["subscribe", "mychan", 1]),
+        )
+
+    async def test_subscribe_multiple(self):
+        subscriptions = Subscriptions()
+
+        self.assertEqual(
+            await SUBSCRIBE("my-chan1").set_subscriptions(subscriptions).execute(),
+            encode(["subscribe", "my-chan1", 1]),
+        )
+        self.assertEqual(
+            await SUBSCRIBE("my-chan2").set_subscriptions(subscriptions).execute(),
+            encode(["subscribe", "my-chan2", 2]),
+        )
+        self.assertEqual(
+            await SUBSCRIBE("my-chan1").set_subscriptions(subscriptions).execute(),
+            encode(["subscribe", "my-chan1", 2]),
         )
 
 

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import asyncio
 from collections import defaultdict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Callable, ClassVar, Mapping, Self
 
@@ -26,6 +26,20 @@ class Context:
         self.need_preplica_ack: bool = False
 
 
+@dataclass
+class Subscriptions:
+    channels: set[str] = field(default_factory=set)
+
+    def subscribe(self, channel):
+        self.channels.add(channel)
+
+    def count(self):
+        return len(self.channels)
+
+    def clear(self):
+        self.channels.clear()
+
+
 class CommandRegistry:
     def __init__(self):
         self.__registry = {}
@@ -43,10 +57,17 @@ class CommandRegistry:
         return cls
 
     async def execute(
-        self, transaction_id: int, context: Context, command: str, *args: list[str]
+        self,
+        transaction_id: int,
+        context: Context,
+        subscriptions: Subscriptions,
+        command: str,
+        *args: list[str],
     ) -> list[bytes]:
         log("execute", command, type(args), args)
-        response = await self.__execute(transaction_id, context, command, *args)
+        response = await self.__execute(
+            transaction_id, context, subscriptions, command, *args
+        )
         match response:
             case [*payloads]:
                 return payloads
@@ -54,12 +75,19 @@ class CommandRegistry:
                 return [payload]
 
     async def __execute(
-        self, transaction_id: int, context: Context, command: str, *args: list[str]
+        self,
+        transaction_id: int,
+        context: Context,
+        subscriptions: Subscriptions,
+        command: str,
+        *args: list[str],
     ) -> bytes:
         cmd = command.upper()
         if cmd in self:
             cmd_class = self[cmd]
-            cmd_instance = cmd_class(*args).set_context(context)
+            cmd_instance = (
+                cmd_class(*args).set_context(context).set_subscriptions(subscriptions)
+            )
             if cmd_class == MULTI:
                 self.__transactions[transaction_id] = []
 
@@ -103,6 +131,7 @@ waiting_queue: Mapping[str, asyncio.Future] = defaultdict(deque)
 
 class RedisCommand(ABC):
     context: Context | None = None
+    subscriptions: Subscriptions | None = None
 
     @abstractmethod
     def __init__(self, args: list[str]):
@@ -112,6 +141,10 @@ class RedisCommand(ABC):
 
     def set_context(self, context: Context) -> Self:
         self.context = context
+        return self
+
+    def set_subscriptions(self, subscriptions: Subscriptions) -> Self:
+        self.subscriptions = subscriptions
         return self
 
     def has_context(self) -> bool:
@@ -815,4 +848,5 @@ class SUBSCRIBE(RedisCommand):
                 raise ValueError
 
     async def execute(self):
-        return encode(["subscribe", self.channel, 1])
+        self.subscriptions.subscribe(self.channel)
+        return encode(["subscribe", self.channel, self.subscriptions.count()])

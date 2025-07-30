@@ -3,7 +3,7 @@ from asyncio import StreamReader, StreamWriter
 
 from app.storage import storage
 from app.args import parse_args
-from app.command import PSYNC, Context, registry
+from app.command import PSYNC, Context, Subscriptions, registry
 
 from app.resp import decode, decode_commands, encode
 from app.log import log
@@ -13,6 +13,7 @@ context = Context(parse_args())
 
 
 async def execute_command(
+    subscriptions: Subscriptions,
     reader: StreamReader,
     writer: StreamWriter,
     command: list[str] | str,
@@ -22,7 +23,9 @@ async def execute_command(
     log("command", command, id(reader))
     match command:
         case [cmd, *args]:
-            payloads = await registry.execute(id(writer), context, cmd, *args)
+            payloads = await registry.execute(
+                id(writer), context, subscriptions, cmd, *args
+            )
             payload = b"".join(payloads)
             log("payload >>>", payload)
             writer.write(payload)
@@ -38,11 +41,14 @@ async def execute_command(
 
 
 async def handle_connection(reader: StreamReader, writer: StreamWriter):
+    subscriptions = Subscriptions()
     while len(data := await reader.read(1024)) > 0:
         commands = decode_commands(data)
         log("commands", commands)
         for command, offset_delta in commands:
-            await execute_command(reader, writer, command, offset_delta=offset_delta)
+            await execute_command(
+                subscriptions, reader, writer, command, offset_delta=offset_delta
+            )
 
 
 async def handle_commands(reader: StreamReader, writer: StreamWriter):
@@ -76,7 +82,11 @@ async def handshake():
                 match response:
                     case [_, *_]:
                         await execute_command(
-                            reader, writer, response, offset_delta=len(encode(response))
+                            Subscriptions(),
+                            reader,
+                            writer,
+                            response,
+                            offset_delta=len(encode(response)),
                         )
 
         log("handshake finished")

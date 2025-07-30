@@ -1,7 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from io import BufferedRandom
+from os import path
 import time
 from typing import Optional, Self
+
+from app.log import log
 
 
 @dataclass
@@ -72,8 +76,11 @@ class Stream:
 
 
 class Storage:
-    def __init__(self):
+    def __init__(self, dirname: str | None = None, dbfilename: str | None = None):
         self.__storage = {}
+
+        if dirname is not None and dbfilename is not None:
+            self.__storage |= load_from_rdb_dump(dirname, dbfilename)
 
     def get(self, key: str) -> Optional[any]:
         if key in self.__storage:
@@ -107,3 +114,90 @@ class Storage:
 
 
 storage = Storage()
+
+
+def load_from_rdb_dump(dirname: str, dbfilename: str) -> dict[str, tuple[any, int]]:
+    def read_int(file: BufferedRandom, count: int) -> int:
+        return int.from_bytes(file.read(count), byteorder="big")
+
+    def read_size(file: BufferedRandom) -> int:
+        first_byte = read_int(file, 1)
+        match first_byte >> 6:
+            case 0:
+                return first_byte
+            case 1:
+                return ((first_byte & 0x5F) << 8) | read_int(file, 1)
+            case 2:
+                return read_int(file, 4)
+            case 3:
+                last_six_bits = first_byte & 0x3F
+                match last_six_bits:
+                    case 0:
+                        return -1
+                    case 1:
+                        return -2
+                    case 2:
+                        return -4
+                    case _:
+                        raise ValueError(f"Unknown special format {last_six_bits}")
+
+    def read_var_length_value(file: BufferedRandom) -> any:
+        size = read_size(file)
+        match size:
+            case -1:
+                return read_int(file, 1)
+            case -2:
+                return read_int(file, 2)
+            case -4:
+                return read_int(file, 4)
+            case _:
+                value = file.read(size).decode()
+                return value
+
+    def read_key_value(file: BufferedRandom) -> tuple[str, any]:
+        value_type = file.read(1)
+        key = read_var_length_value(file)
+        match value_type:
+            case b"\x00":  # string
+                return (key, read_var_length_value(file))
+            case _:
+                raise ValueError(f"Unknown value type: {value_type}")
+
+    rdbpath = path.join(dirname, dbfilename)
+    if not path.exists(rdbpath):
+        log("RDB dump path does not exist:", rdbpath)
+        return {}
+
+    contents = {}
+    with open(rdbpath, "b+r") as file:
+        file.seek(9)  # 5 bytes magic string "REDIS" + 4 bytes version string
+
+        while len(opcode := file.read(1)) > 0:
+            match opcode:
+                case b"\xff":
+                    break
+                case b"\xfe":
+                    _db_num = read_int(file, 1)
+                case b"\xfd":
+                    expiration_s = int.from_bytes(file.read(4), byteorder="little")
+                    key, value = read_key_value(file)
+                    contents[key] = (value, datetime.now(), expiration_s * 1_000)
+                case b"\xfc":
+                    expiration_ms = int.from_bytes(file.read(8), byteorder="little")
+                    key, value = read_key_value(file)
+                    contents[key] = (value, datetime.now(), expiration_ms)
+                case b"\xfb":
+                    _hash_table_size = read_size(file)
+                    _hash_table_size_exp = read_size(file)
+                case b"\xfa":
+                    key = read_var_length_value(file)
+                    value = read_var_length_value(file)
+                    log("AUX entry", key, value)
+                case b"\x00":
+                    key = read_var_length_value(file)
+                    value = read_var_length_value(file)
+                    contents[key] = (value, datetime.now(), 10**10)
+                case _:
+                    raise ValueError(opcode)
+
+    return contents

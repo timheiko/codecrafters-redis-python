@@ -182,3 +182,18 @@ class TestStorage(unittest.TestCase):
 
         self.assertTrue(len(entry.idx) > 1)
         self.assertIn("-*", entry.idx)
+
+    def test_load_from_rdb_dump_foo_bar(self):
+        storage = Storage("dumps", "dump-strings.rdb")
+
+        self.assertEqual(storage.get("foo"), "bar")
+
+    def test_load_from_rdb_dump_foo_ex_bar(self):
+        storage = Storage("dumps", "dump-strings.rdb")
+
+        self.assertEqual(storage.get("foo_ex"), "bar_ex")
+
+    def test_load_from_rdb_dump_foo_px_bar(self):
+        storage = Storage("dumps", "dump-strings.rdb")
+
+        self.assertEqual(storage.get("foo_px"), "bar_px")

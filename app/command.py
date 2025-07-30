@@ -38,6 +38,12 @@ class Session:
             return True
         return False
 
+    def unsubscribe(self, channel) -> bool:
+        if channel in self.channels:
+            self.channels.discard(channel)
+            return True
+        return False
+
     def subscriptions(self):
         return len(self.channels)
 
@@ -843,7 +849,7 @@ class KEYS(RedisCommand):
         return encode(storage.get_keys())
 
 
-subscribers: dict[str, list[asyncio.StreamWriter]] = defaultdict(list)
+subscribers: dict[str, list[Session]] = defaultdict(list)
 
 
 @registry.register
@@ -876,11 +882,20 @@ class UNSUBSCRIBE(RedisCommand):
     https://redis.io/docs/latest/commands/unsubscribe/
     """
 
+    channel: str
+
     def __init__(self, *args: list[str]):
-        pass
+        match args:
+            case [channel]:
+                self.channel = channel
+            case _:
+                raise ValueError
 
     async def execute(self):
-        pass
+        if self.session.unsubscribe(self.channel):
+            subscribers[self.channel].remove(self.session)
+
+        return encode(["unsubscribe", self.channel, self.session.subscriptions()])
 
 
 @registry.register
@@ -945,8 +960,6 @@ class PUBLISH(RedisCommand):
 
     async def execute(self):
         count = 0
-        log(self, subscribers)
-        log(self.channel, len(subscribers[self.channel]))
         for session in subscribers[self.channel]:
             try:
                 session.writer.write(encode(["message", self.channel, self.message]))

@@ -713,13 +713,29 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     def test_session_subscribe_duplicate(self):
         session = Session()
 
-        self.assertEqual(session.subscribe("my_channel_1"), True)
-        self.assertEqual(session.subscribe("my_channel_2"), True)
+        self.assertTrue(session.subscribe("my_channel_1"))
+        self.assertTrue(session.subscribe("my_channel_2"))
 
         self.assertEqual(session.subscriptions(), 2)
 
-        self.assertEqual(session.subscribe("my_channel_1"), False)
+        self.assertFalse(session.subscribe("my_channel_1"))
         self.assertEqual(session.subscriptions(), 2)
+
+    def test_session_unsubscribe(self):
+        session = Session()
+
+        session.subscribe("my_channel_1")
+        session.subscribe("my_channel_2")
+
+        self.assertEqual(session.subscriptions(), 2)
+
+        self.assertTrue(session.unsubscribe("my_channel_1"))
+        self.assertEqual(session.subscriptions(), 1)
+
+        self.assertFalse(session.unsubscribe("my_channel_1"))
+
+        self.assertTrue(session.unsubscribe("my_channel_2"))
+        self.assertEqual(session.subscriptions(), 0)
 
 
 if __name__ == "__main__":

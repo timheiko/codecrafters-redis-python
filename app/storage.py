@@ -76,17 +76,19 @@ class Stream:
 
 
 class Storage:
-    def __init__(self, dirname: str | None = None, dbfilename: str | None = None):
+    def __init__(self):
         self.__storage = {}
 
+    def load_from_rdb_dump(
+        self, dirname: str | None = None, dbfilename: str | None = None
+    ) -> None:
         if dirname is not None and dbfilename is not None:
             self.__storage |= load_from_rdb_dump(dirname, dbfilename)
 
     def get(self, key: str) -> Optional[any]:
         if key in self.__storage:
-            value, since, duration_ms = self.__storage[key]
-            elapsed = datetime.now() - since
-            if elapsed / timedelta(milliseconds=1) >= duration_ms:
+            value, expiration = self.__storage[key]
+            if int(datetime.now().timestamp() * 1_000) >= expiration:
                 del self.__storage[key]
                 return None
             else:
@@ -94,7 +96,10 @@ class Storage:
         return None
 
     def set(self, key: str, value: any, duration_ms: int = 10**10) -> None:
-        self.__storage[key] = (value, datetime.now(), duration_ms)
+        self.__storage[key] = (
+            value,
+            int(datetime.now().timestamp() * 1_000) + duration_ms,
+        )
 
     def get_list(self, key: str) -> list[any]:
         return self.get(key) or []
@@ -111,6 +116,9 @@ class Storage:
 
     def get_stream(self, key: str) -> Stream:
         return self.get(key) or Stream()
+
+    def get_keys(self) -> list[str]:
+        return list(self.__storage.keys())
 
 
 storage = Storage()
@@ -181,22 +189,25 @@ def load_from_rdb_dump(dirname: str, dbfilename: str) -> dict[str, tuple[any, in
                 case b"\xfd":
                     expiration_s = int.from_bytes(file.read(4), byteorder="little")
                     key, value = read_key_value(file)
-                    contents[key] = (value, datetime.now(), expiration_s * 1_000)
+                    contents[key] = (value, expiration_s * 1_000)
+                    log("Loaded RDB EX entry", key, value, expiration_s)
                 case b"\xfc":
                     expiration_ms = int.from_bytes(file.read(8), byteorder="little")
                     key, value = read_key_value(file)
-                    contents[key] = (value, datetime.now(), expiration_ms)
+                    contents[key] = (value, expiration_ms)
+                    log("Loaded RDB PX entry", key, value, expiration_ms)
                 case b"\xfb":
                     _hash_table_size = read_size(file)
                     _hash_table_size_exp = read_size(file)
                 case b"\xfa":
                     key = read_var_length_value(file)
                     value = read_var_length_value(file)
-                    log("AUX entry", key, value)
+                    log("Loaded RDB AUX entry", key, value)
                 case b"\x00":
                     key = read_var_length_value(file)
                     value = read_var_length_value(file)
-                    contents[key] = (value, datetime.now(), 10**10)
+                    contents[key] = (value, 10**20)
+                    log("Loaded RDB non-exp entry", key, value)
                 case _:
                     raise ValueError(opcode)
 

@@ -659,12 +659,8 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_reading_keys_star_foo_bar(self):
-        rdb_path = "dumps/foo-bar.rdb"
-        args = Args()
-        args.dir, args.dbfilename = path.dirname(rdb_path), path.basename(rdb_path)
-
-        cmd = KEYS("*").set_context(Context(args))
-        self.assertEqual(await cmd.execute(), encode(["foo"]))
+        storage.load_from_rdb_dump("dumps", "foo-bar.rdb")
+        self.assertEqual(await KEYS("*").execute(), encode(["foo"]))
 
 
 if __name__ == "__main__":

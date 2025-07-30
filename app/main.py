@@ -1,6 +1,7 @@
 import asyncio
 from asyncio import StreamReader, StreamWriter
 
+from app.storage import storage
 from app.args import parse_args
 from app.command import PSYNC, Context, registry
 
@@ -91,6 +92,7 @@ async def main():
     log(f"Serving on {addrs}")
 
     await handshake()
+    storage.load_from_rdb_dump(context.args.dir, context.args.dbfilename)
 
     async with server:
         await server.serve_forever()

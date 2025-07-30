@@ -183,17 +183,32 @@ class TestStorage(unittest.TestCase):
         self.assertTrue(len(entry.idx) > 1)
         self.assertIn("-*", entry.idx)
 
-    def test_load_from_rdb_dump_foo_bar(self):
-        storage = Storage("dumps", "dump-strings.rdb")
+    def test_load_from_non_existent_rdb_dump(self):
+        self.storage.load_from_rdb_dump(None, None)
 
-        self.assertEqual(storage.get("foo"), "bar")
+        self.assertEqual(self.storage.get_keys(), [])
+
+    def test_load_from_non_existent_rdb_dump_no_dir(self):
+        self.storage.load_from_rdb_dump(None, "dump-strings.rdb")
+
+        self.assertEqual(self.storage.get_keys(), [])
+
+    def test_load_from_non_existent_rdb_dump_no_dbfilename(self):
+        self.storage.load_from_rdb_dump("dumps", None)
+
+        self.assertEqual(self.storage.get_keys(), [])
+
+    def test_load_from_rdb_dump_foo_bar(self):
+        self.storage.load_from_rdb_dump("dumps", "dump-strings.rdb")
+
+        self.assertEqual(self.storage.get("foo"), "bar")
 
     def test_load_from_rdb_dump_foo_ex_bar(self):
-        storage = Storage("dumps", "dump-strings.rdb")
+        self.storage.load_from_rdb_dump("dumps", "dump-strings.rdb")
 
-        self.assertEqual(storage.get("foo_ex"), "bar_ex")
+        self.assertEqual(self.storage.get("foo_ex"), "bar_ex")
 
     def test_load_from_rdb_dump_foo_px_bar(self):
-        storage = Storage("dumps", "dump-strings.rdb")
+        self.storage.load_from_rdb_dump("dumps", "dump-strings.rdb")
 
-        self.assertEqual(storage.get("foo_px"), "bar_px")
+        self.assertEqual(self.storage.get("foo_px"), "bar_px")

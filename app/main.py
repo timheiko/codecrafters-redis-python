@@ -3,7 +3,7 @@ from asyncio import StreamReader, StreamWriter
 
 from app.storage import storage
 from app.args import parse_args
-from app.command import PSYNC, Context, Subscriptions, registry
+from app.command import PSYNC, Context, Session, registry
 
 from app.resp import decode, decode_commands, encode
 from app.log import log
@@ -13,39 +13,37 @@ context = Context(parse_args())
 
 
 async def execute_command(
-    subscriptions: Subscriptions,
-    reader: StreamReader,
-    writer: StreamWriter,
+    session: Session,
     command: list[str] | str,
     *,
     offset_delta: int = 0,
 ):
-    log("command", command, id(reader))
+    log("command", command, id(session.reader))
     match command:
         case [cmd, *args]:
-            if subscriptions.count() > 0:
-                if not registry.check_command_allowed_in_subscription_mode(cmd):
-                    writer.write(
+            if session.subscriptions() > 0:
+                if not registry.is_allowed_in_subscription_mode(cmd):
+                    session.writer.write(
                         encode(
                             ValueError(
                                 f"Can't execute '{cmd.lower()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context"
                             )
                         )
                     )
-                    await writer.drain()
+                    await session.writer.drain()
 
                     return
 
             payloads = await registry.execute(
-                id(writer), context, subscriptions, cmd, *args
+                id(session.reader), context, session, cmd, *args
             )
             payload = b"".join(payloads)
             log("payload >>>", payload)
-            writer.write(payload)
-            await writer.drain()
+            session.writer.write(payload)
+            await session.writer.drain()
 
             if registry[cmd] == PSYNC:
-                context.replicas.append((reader, writer))
+                context.replicas.append((session.reader, session.writer))
                 await asyncio.sleep(3_000)
 
             context.offset += offset_delta
@@ -54,22 +52,20 @@ async def execute_command(
 
 
 async def handle_connection(reader: StreamReader, writer: StreamWriter):
-    subscriptions = Subscriptions()
+    session = Session(reader, writer)
     while len(data := await reader.read(1024)) > 0:
         commands = decode_commands(data)
         log("commands", commands)
         for command, offset_delta in commands:
-            await execute_command(
-                subscriptions, reader, writer, command, offset_delta=offset_delta
-            )
+            await execute_command(session, command, offset_delta=offset_delta)
 
 
 async def handle_commands(reader: StreamReader, writer: StreamWriter):
     await handle_connection(reader, writer)
 
-    if (reader, writer) not in context.replicas:
-        writer.close()
-        await writer.wait_closed()
+    # if (reader, writer) not in context.replicas:
+    #     writer.close()
+    #     await writer.wait_closed()
 
 
 async def handshake():
@@ -95,9 +91,7 @@ async def handshake():
                 match response:
                     case [_, *_]:
                         await execute_command(
-                            Subscriptions(),
-                            reader,
-                            writer,
+                            Session(reader, writer),
                             response,
                             offset_delta=len(encode(response)),
                         )

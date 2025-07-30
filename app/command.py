@@ -27,17 +27,19 @@ class Context:
 
 
 @dataclass
-class Subscriptions:
+class Session:
+    reader: asyncio.StreamReader | None = None
+    writer: asyncio.StreamWriter | None = None
     channels: set[str] = field(default_factory=set)
 
-    def subscribe(self, channel):
-        self.channels.add(channel)
+    def subscribe(self, channel) -> bool:
+        if channel not in self.channels:
+            self.channels.add(channel)
+            return True
+        return False
 
-    def count(self):
+    def subscriptions(self):
         return len(self.channels)
-
-    def clear(self):
-        self.channels.clear()
 
 
 class CommandRegistry:
@@ -60,13 +62,13 @@ class CommandRegistry:
         self,
         transaction_id: int,
         context: Context,
-        subscriptions: Subscriptions,
+        session: Session,
         command: str,
         *args: list[str],
     ) -> list[bytes]:
         log("execute", command, type(args), args)
         response = await self.__execute(
-            transaction_id, context, subscriptions, command, *args
+            transaction_id, context, session, command, *args
         )
         match response:
             case [*payloads]:
@@ -78,16 +80,14 @@ class CommandRegistry:
         self,
         transaction_id: int,
         context: Context,
-        subscriptions: Subscriptions,
+        session: Session,
         command: str,
         *args: list[str],
     ) -> bytes:
         cmd = command.upper()
         if cmd in self:
             cmd_class = self[cmd]
-            cmd_instance = (
-                cmd_class(*args).set_context(context).set_subscriptions(subscriptions)
-            )
+            cmd_instance = cmd_class(*args).set_context(context).set_session(session)
             if cmd_class == MULTI:
                 self.__transactions[transaction_id] = []
 
@@ -117,7 +117,7 @@ class CommandRegistry:
                 return await cmd_instance.execute()
         raise Exception(f"Unknown command: {command}")
 
-    def check_command_allowed_in_subscription_mode(self, cmd: str):
+    def is_allowed_in_subscription_mode(self, cmd: str) -> bool:
         return self[cmd] in [
             SUBSCRIBE,
             UNSUBSCRIBE,
@@ -141,7 +141,7 @@ waiting_queue: Mapping[str, asyncio.Future] = defaultdict(deque)
 
 class RedisCommand(ABC):
     context: Context | None = None
-    subscriptions: Subscriptions | None = None
+    session: Session | None = None
 
     @abstractmethod
     def __init__(self, args: list[str]):
@@ -153,8 +153,8 @@ class RedisCommand(ABC):
         self.context = context
         return self
 
-    def set_subscriptions(self, subscriptions: Subscriptions) -> Self:
-        self.subscriptions = subscriptions
+    def set_session(self, session: Session) -> Self:
+        self.session = session
         return self
 
     def has_context(self) -> bool:
@@ -174,7 +174,7 @@ class PING(RedisCommand):
 
     async def execute(self):
         if self.context is None or self.context.args.is_master():
-            if self.subscriptions is not None and self.subscriptions.count() > 0:
+            if self.session is not None and self.session.subscriptions() > 0:
                 return encode(["pong", ""])
             return encode_simple("PONG")
         return []
@@ -843,6 +843,9 @@ class KEYS(RedisCommand):
         return encode(storage.get_keys())
 
 
+subscribers: dict[str, list[asyncio.StreamWriter]] = defaultdict(list)
+
+
 @registry.register
 @dataclass
 class SUBSCRIBE(RedisCommand):
@@ -860,8 +863,10 @@ class SUBSCRIBE(RedisCommand):
                 raise ValueError
 
     async def execute(self):
-        self.subscriptions.subscribe(self.channel)
-        return encode(["subscribe", self.channel, self.subscriptions.count()])
+        if self.session.subscribe(self.channel):
+            subscribers[self.channel].append(self.session)
+
+        return encode(["subscribe", self.channel, self.session.subscriptions()])
 
 
 @registry.register
@@ -918,3 +923,35 @@ class QUIT(RedisCommand):
 
     async def execute(self):
         pass
+
+
+@registry.register
+@dataclass
+class PUBLISH(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/publish/
+    """
+
+    channel: str
+    message: str
+
+    def __init__(self, *args):
+        match args:
+            case [channel, message]:
+                self.channel = channel
+                self.message = message
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        count = 0
+        log(self, subscribers)
+        log(self.channel, len(subscribers[self.channel]))
+        for session in subscribers[self.channel]:
+            try:
+                session.writer.write(encode(["message", self.channel, self.message]))
+                await session.writer.drain()
+                count += 1
+            except Exception as e:
+                log(e)
+        return encode(count)

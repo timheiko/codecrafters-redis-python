@@ -31,7 +31,7 @@ from app.command import (
     XREAD,
     CommandRegistry,
     Context,
-    Subscriptions,
+    Session,
 )
 
 from app.resp import decode, encode, encode_simple
@@ -61,33 +61,29 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         transaction_id = 1
         context = Context(Args())
-        subscriptions = Subscriptions()
+        session = Session()
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, subscriptions, "MULTI"),
+            await registry.execute(transaction_id, context, session, "MULTI"),
             [encode_simple("OK")],
         )
         self.assertEqual(
             await registry.execute(
-                transaction_id, context, subscriptions, "SET", "foo", "bar"
+                transaction_id, context, session, "SET", "foo", "bar"
             ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(
-                transaction_id, context, subscriptions, "GET", "foo"
-            ),
+            await registry.execute(transaction_id, context, session, "GET", "foo"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, subscriptions, "EXEC"),
+            await registry.execute(transaction_id, context, session, "EXEC"),
             [encode(["OK", "bar"])],
         )
 
         self.assertEqual(
-            await registry.execute(
-                transaction_id, context, subscriptions, "GET", "foo"
-            ),
+            await registry.execute(transaction_id, context, session, "GET", "foo"),
             [encode("bar")],
         )
 
@@ -99,9 +95,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         transaction_id = 1
 
         self.assertEqual(
-            await registry.execute(
-                transaction_id, Context(Args()), Subscriptions(), "EXEC"
-            ),
+            await registry.execute(transaction_id, Context(Args()), Session(), "EXEC"),
             [encode(ValueError("EXEC without MULTI"))],
         )
 
@@ -114,25 +108,23 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         transaction_id = 1
         context = Context(Args())
-        subscriptions = Subscriptions()
+        session = Session()
         self.assertEqual(
-            await registry.execute(transaction_id, context, subscriptions, "MULTI"),
+            await registry.execute(transaction_id, context, session, "MULTI"),
             [encode_simple("OK")],
         )
         self.assertEqual(
             await registry.execute(
-                transaction_id, context, subscriptions, "SET", "foo", "bar"
+                transaction_id, context, session, "SET", "foo", "bar"
             ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(
-                transaction_id, context, subscriptions, "GET", "foo"
-            ),
+            await registry.execute(transaction_id, context, session, "GET", "foo"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, subscriptions, "DISCARD"),
+            await registry.execute(transaction_id, context, session, "DISCARD"),
             [encode_simple("OK")],
         )
 
@@ -143,10 +135,10 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         transaction_id = 1
         context = Context(Args())
-        subscriptions = Subscriptions()
+        session = Session()
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, subscriptions, "DISCARD"),
+            await registry.execute(transaction_id, context, session, "DISCARD"),
             [encode(ValueError("DISCARD without MULTI"))],
         )
 
@@ -161,12 +153,12 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await PING().execute(), b"+PONG\r\n")
 
     async def test_ping_in_subscribed_mod(self):
-        subscriptions = Subscriptions()
-        subscriptions.subscribe("abc-channel")
+        session = Session()
+        session.subscribe("abc-channel")
 
         self.assertEqual(
-            await PING().set_subscriptions(subscriptions).execute(),
-            encode(["PONG", ""]),
+            await PING().set_session(session).execute(),
+            encode(["pong", ""]),
         )
 
     async def test_echo(self):
@@ -688,28 +680,46 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await KEYS("*").execute(), encode(["foo"]))
 
     async def test_subscribe(self):
-        subscriptions = Subscriptions()
+        session = Session()
 
         self.assertEqual(
-            await SUBSCRIBE("mychan").set_subscriptions(subscriptions).execute(),
+            await SUBSCRIBE("mychan").set_session(session).execute(),
             encode(["subscribe", "mychan", 1]),
         )
 
     async def test_subscribe_multiple(self):
-        subscriptions = Subscriptions()
+        session = Session()
 
         self.assertEqual(
-            await SUBSCRIBE("my-chan1").set_subscriptions(subscriptions).execute(),
+            await SUBSCRIBE("my-chan1").set_session(session).execute(),
             encode(["subscribe", "my-chan1", 1]),
         )
         self.assertEqual(
-            await SUBSCRIBE("my-chan2").set_subscriptions(subscriptions).execute(),
+            await SUBSCRIBE("my-chan2").set_session(session).execute(),
             encode(["subscribe", "my-chan2", 2]),
         )
         self.assertEqual(
-            await SUBSCRIBE("my-chan1").set_subscriptions(subscriptions).execute(),
+            await SUBSCRIBE("my-chan1").set_session(session).execute(),
             encode(["subscribe", "my-chan1", 2]),
         )
+
+    def test_session_subscribe(self):
+        session = Session()
+
+        self.assertEqual(session.subscribe("my_channel"), True)
+
+        self.assertEqual(session.subscriptions(), 1)
+
+    def test_session_subscribe_duplicate(self):
+        session = Session()
+
+        self.assertEqual(session.subscribe("my_channel_1"), True)
+        self.assertEqual(session.subscribe("my_channel_2"), True)
+
+        self.assertEqual(session.subscriptions(), 2)
+
+        self.assertEqual(session.subscribe("my_channel_1"), False)
+        self.assertEqual(session.subscriptions(), 2)
 
 
 if __name__ == "__main__":

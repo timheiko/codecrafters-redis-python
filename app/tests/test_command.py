@@ -160,6 +160,15 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_ping(self):
         self.assertEqual(await PING().execute(), b"+PONG\r\n")
 
+    async def test_ping_in_subscribed_mod(self):
+        subscriptions = Subscriptions()
+        subscriptions.subscribe("abc-channel")
+
+        self.assertEqual(
+            await PING().set_subscriptions(subscriptions).execute(),
+            encode(["PONG", ""]),
+        )
+
     async def test_echo(self):
         self.assertEqual(await ECHO("hello", "world!").execute(), b"+hello world!\r\n")
 

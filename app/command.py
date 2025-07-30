@@ -174,6 +174,8 @@ class PING(RedisCommand):
 
     async def execute(self):
         if self.context is None or self.context.args.is_master():
+            if self.subscriptions is not None and self.subscriptions.count() > 0:
+                return encode(["pong", ""])
             return encode_simple("PONG")
         return []
 

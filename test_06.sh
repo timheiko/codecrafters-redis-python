@@ -96,3 +96,5 @@ redis-cli info replication
 redis-cli WAIT 0 60000
 
 redis-cli CONFIG GET dir dbfilename
+
+redis-cli SUBSCRIBE my-chan

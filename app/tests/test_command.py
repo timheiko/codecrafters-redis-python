@@ -24,6 +24,7 @@ from app.command import (
     REPLCONF,
     RPUSH,
     SET,
+    SUBSCRIBE,
     TYPE,
     WAIT,
     XADD,
@@ -661,6 +662,11 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_reading_keys_star_foo_bar(self):
         storage.load_from_rdb_dump("dumps", "foo-bar.rdb")
         self.assertEqual(await KEYS("*").execute(), encode(["foo"]))
+
+    async def test_subscribe(self):
+        self.assertEqual(
+            await SUBSCRIBE("mychan").execute(), encode(["subscribe", "mychan", 1])
+        )
 
 
 if __name__ == "__main__":

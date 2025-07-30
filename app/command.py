@@ -796,3 +796,23 @@ class KEYS(RedisCommand):
 
     async def execute(self):
         return encode(storage.get_keys())
+
+
+@registry.register
+@dataclass
+class SUBSCRIBE(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/subscribe/
+    """
+
+    channel: str
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [channel]:
+                self.channel = channel
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        return encode(["subscribe", self.channel, 1])

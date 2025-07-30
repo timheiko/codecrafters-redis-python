@@ -23,6 +23,19 @@ async def execute_command(
     log("command", command, id(reader))
     match command:
         case [cmd, *args]:
+            if subscriptions.count() > 0:
+                if not registry.check_command_allowed_in_subscription_mode(cmd):
+                    writer.write(
+                        encode(
+                            ValueError(
+                                f"Can't execute '{cmd.lower()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context"
+                            )
+                        )
+                    )
+                    await writer.drain()
+
+                    return
+
             payloads = await registry.execute(
                 id(writer), context, subscriptions, cmd, *args
             )

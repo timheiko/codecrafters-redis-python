@@ -117,6 +117,16 @@ class CommandRegistry:
                 return await cmd_instance.execute()
         raise Exception(f"Unknown command: {command}")
 
+    def check_command_allowed_in_subscription_mode(self, cmd: str):
+        return self[cmd] in [
+            SUBSCRIBE,
+            UNSUBSCRIBE,
+            PSUBSCRIBE,
+            PUNSUBSCRIBE,
+            PING,
+            QUIT,
+        ]
+
     def __getitem__(self, key):
         return self.__registry[key.upper()]
 
@@ -850,3 +860,59 @@ class SUBSCRIBE(RedisCommand):
     async def execute(self):
         self.subscriptions.subscribe(self.channel)
         return encode(["subscribe", self.channel, self.subscriptions.count()])
+
+
+@registry.register
+@dataclass
+class UNSUBSCRIBE(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/unsubscribe/
+    """
+
+    def __init__(self, *args: list[str]):
+        pass
+
+    async def execute(self):
+        pass
+
+
+@registry.register
+@dataclass
+class PSUBSCRIBE(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/psubscribe/
+    """
+
+    def __init__(self, *args: list[str]):
+        pass
+
+    async def execute(self):
+        pass
+
+
+@registry.register
+@dataclass
+class PUNSUBSCRIBE(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/punsubscribe/
+    """
+
+    def __init__(self, *args: list[str]):
+        pass
+
+    async def execute(self):
+        pass
+
+
+@registry.register
+@dataclass
+class QUIT(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/quit/
+    """
+
+    def __init__(self, *args: list[str]):
+        pass
+
+    async def execute(self):
+        pass

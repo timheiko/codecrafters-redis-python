@@ -73,6 +73,11 @@ class CommandRegistry:
         *args: list[str],
     ) -> list[bytes]:
         log("execute", command, type(args), args)
+        if session.subscriptions() > 0:
+            if not self.is_allowed_in_subscription_mode(command):
+                msg = f"Can't execute '{command.lower()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context"
+                return [encode(ValueError(msg))]
+
         response = await self.__execute(
             transaction_id, context, session, command, *args
         )

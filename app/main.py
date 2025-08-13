@@ -21,19 +21,6 @@ async def execute_command(
     log("command", command, id(session.reader))
     match command:
         case [cmd, *args]:
-            if session.subscriptions() > 0:
-                if not registry.is_allowed_in_subscription_mode(cmd):
-                    session.writer.write(
-                        encode(
-                            ValueError(
-                                f"Can't execute '{cmd.lower()}': only (P|S)SUBSCRIBE / (P|S)UNSUBSCRIBE / PING / QUIT / RESET are allowed in this context"
-                            )
-                        )
-                    )
-                    await session.writer.drain()
-
-                    return
-
             payloads = await registry.execute(
                 id(session.reader), context, session, cmd, *args
             )

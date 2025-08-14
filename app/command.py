@@ -1077,3 +1077,24 @@ class ZRANGE(RedisCommand):
         sorted_items = sorted(sorted_set.items(), key=lambda item: (item[-1], item[0]))
         zrange = [member for member, _ in sorted_items]
         return encode(zrange[start:stop])
+
+
+@registry.register
+@dataclass
+class ZCARD(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/zcard/
+    """
+
+    set_name: str
+
+    def __init__(self, *args):
+        match args:
+            case [set_name]:
+                self.set_name = set_name
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        sorted_set = storage.get_sorted_set(self.set_name)
+        return encode(len(sorted_set))

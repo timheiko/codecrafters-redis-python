@@ -30,6 +30,7 @@ from app.command import (
     XRANGE,
     XREAD,
     ZADD,
+    ZCARD,
     ZRANGE,
     ZRANK,
     CommandRegistry,
@@ -816,6 +817,23 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
                 .execute()
             ),
             ["Ford", "Sam-Bodden", "Ben"],
+        )
+
+    async def test_zcard(self):
+        context = Context(Args())
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
+        await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
+
+        self.assertEqual(
+            decode(await ZCARD("zset_key").set_context(context).execute()), 2
+        )
+
+    async def test_zcard_missing(self):
+        context = Context(Args())
+
+        self.assertEqual(
+            decode(await ZCARD("zset_key").set_context(context).execute()), 0
         )
 
 

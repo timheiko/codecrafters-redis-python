@@ -1,9 +1,14 @@
 import unittest
-from ..resp import decode, decode_bulk_string, decode_commands, encode, encode_simple
+from app.resp import (
+    decode,
+    decode_bulk_string,
+    decode_commands,
+    encode,
+    encode_simple,
+)
 
 
 class RespTest(unittest.TestCase):
-
     def test_encode_bulk_string_ok(self):
         self.assertEqual(encode("OK"), b"$2\r\nOK\r\n")
 
@@ -27,7 +32,8 @@ class RespTest(unittest.TestCase):
 
     def test_encode_array(self):
         self.assertEqual(
-            encode(["foo", None, "bar"]), b"*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n"
+            encode(["foo", None, "bar"]),
+            b"*3\r\n$3\r\nfoo\r\n$-1\r\n$3\r\nbar\r\n",
         )
 
     def test_encode_array_empty(self):
@@ -59,7 +65,7 @@ class RespTest(unittest.TestCase):
     def test_decode_float(self):
         self.assertEqual(decode(encode(5.1)), 5.1)
 
-    def test_decode_bulk_string(self):
+    def test_decode_string(self):
         self.assertEqual(decode(encode("value")), "value")
 
     def test_decode_error(self):
@@ -72,7 +78,11 @@ class RespTest(unittest.TestCase):
         batch = b"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n456\r\n*3\r\n$3\r\nSET\r\n$3\r\nbaz\r\n$3\r\n789\r\n"
         self.assertEqual(
             decode(batch),
-            [["SET", "foo", "123"], ["SET", "bar", "456"], ["SET", "baz", "789"]],
+            [
+                ["SET", "foo", "123"],
+                ["SET", "bar", "456"],
+                ["SET", "baz", "789"],
+            ],
             batch,
         )
 

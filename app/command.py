@@ -3,7 +3,7 @@ import asyncio
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable, ClassVar, Mapping, Self
+from typing import Any, Callable, ClassVar, Mapping, Self, Sequence
 
 from app.args import Args
 from app.log import log
@@ -16,7 +16,7 @@ from app.storage import Stream, StreamEntry, storage
 class Context:
     args: Args
     offset: int
-    replicas: list[any]
+    replicas: list[Any]
     need_preplica_ack: bool
 
     def __init__(self, args: Args, offset: int = 0):
@@ -32,13 +32,13 @@ class Session:
     writer: asyncio.StreamWriter | None = None
     channels: set[str] = field(default_factory=set)
 
-    def subscribe(self, channel) -> bool:
+    def subscribe(self, channel: str) -> bool:
         if channel not in self.channels:
             self.channels.add(channel)
             return True
         return False
 
-    def unsubscribe(self, channel) -> bool:
+    def unsubscribe(self, channel: str) -> bool:
         if channel in self.channels:
             self.channels.discard(channel)
             return True
@@ -46,6 +46,11 @@ class Session:
 
     def subscriptions(self):
         return len(self.channels)
+
+    async def write(self, payload: bytes) -> None:
+        if self.writer is not None:
+            self.writer.write(payload)
+            await self.writer.drain()
 
 
 class CommandRegistry:
@@ -70,7 +75,7 @@ class CommandRegistry:
         context: Context,
         session: Session,
         command: str,
-        *args: list[str],
+        *args: str,
     ) -> list[bytes]:
         log("execute", command, type(args), args)
         if session.subscriptions() > 0:
@@ -93,7 +98,7 @@ class CommandRegistry:
         context: Context,
         session: Session,
         command: str,
-        *args: list[str],
+        *args: str,
     ) -> bytes:
         cmd = command.upper()
         if cmd in self:
@@ -150,7 +155,7 @@ class CommandRegistry:
 
 registry = CommandRegistry()
 
-waiting_queue: Mapping[str, asyncio.Future] = defaultdict(deque)
+waiting_queue: Mapping[str, deque[asyncio.Future]] = defaultdict(deque)
 
 
 class RedisCommand(ABC):
@@ -197,10 +202,14 @@ class PING(RedisCommand):
 @registry.register
 @dataclass
 class ECHO(RedisCommand):
-    args = list[str]
+    """
+    https://redis.io/docs/latest/commands/echo/
+    """
 
-    def __init__(self, *args: list[str]):
-        self.args = list(args)
+    args: tuple[str, ...]
+
+    def __init__(self, *args: str):
+        self.args = args
 
     async def execute(self):
         return encode_simple(" ".join(self.args))
@@ -210,11 +219,11 @@ class ECHO(RedisCommand):
 @dataclass
 class SET(RedisCommand):
     key: str
-    value: any
+    value: Any
     ttlms: float | None
-    args: list[str]
+    args: tuple[str, ...]
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         self.args = args
 
         match args:
@@ -261,7 +270,7 @@ class SET(RedisCommand):
 class GET(RedisCommand):
     key: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key, *_]:
                 self.key = key
@@ -277,7 +286,7 @@ class GET(RedisCommand):
 class LLEN(RedisCommand):
     key: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key, *_]:
                 self.key = key
@@ -294,7 +303,7 @@ class LPOP(RedisCommand):
     key: str
     count: int
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key]:
                 self.key = key
@@ -323,7 +332,7 @@ class LRANGE(RedisCommand):
     start: int
     end: int
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key, start, end]:
                 self.key = key
@@ -342,7 +351,7 @@ class RPUSH(RedisCommand):
     key: str
     items: list[str]
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key, *items]:
                 self.key = key
@@ -364,7 +373,7 @@ class LPUSH(RedisCommand):
     key: str
     items: list[str]
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key, *items]:
                 self.key = key
@@ -386,7 +395,7 @@ class BLPOP(RedisCommand):
     key: str
     timeout: float | None
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key, timeout]:
                 self.key = key
@@ -409,7 +418,7 @@ class BLPOP(RedisCommand):
 class TYPE(RedisCommand):
     key: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key]:
                 self.key = key
@@ -435,9 +444,9 @@ class TYPE(RedisCommand):
 class XADD(RedisCommand):
     key: str
     idx: str
-    field_values: tuple[str]
+    field_values: tuple[str, ...]
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key, idx, *field_vals]:
                 if len(field_vals) % 2 == 0:
@@ -483,7 +492,7 @@ class XRANGE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def execute(self) -> bytes:
         stream: Stream = storage.get_stream(self.key)
         entries = [
             [entry.idx, list(entry.field_values)]
@@ -533,7 +542,7 @@ class XREAD(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def execute(self) -> bytes:
         response = self.__query()
         match self.kind:
             case self.STREAMS:
@@ -551,7 +560,9 @@ class XREAD(RedisCommand):
                     for key, _ in self.queries
                 )
                 finished_tasks, _pending = await asyncio.wait(
-                    tasks, timeout=self.timeout, return_when=asyncio.FIRST_COMPLETED
+                    tasks,
+                    timeout=self.timeout,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
 
                 if len(finished_tasks) > 0:
@@ -561,7 +572,9 @@ class XREAD(RedisCommand):
             case _:
                 raise ValueError
 
-    def __query(self, ts: datetime = datetime.fromtimestamp(0)):
+    Response = list[Sequence[Sequence[Sequence[str]]]]
+
+    def __query(self, ts: datetime = datetime.fromtimestamp(0)) -> list[Response]:
         return [
             [
                 key,
@@ -576,8 +589,8 @@ class XREAD(RedisCommand):
 
 
 async def join_waiting_list(
-    key: str, timeout: float | None, callback: Callable[[], any]
-) -> any:
+    key: str, timeout: float | None, callback: Callable[[], Any]
+) -> Any:
     loop = asyncio.get_event_loop()
     future = loop.create_future()
     waiting_queue[key].append(future)
@@ -606,7 +619,7 @@ class INCR(RedisCommand):
 
     key: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [key]:
                 self.key = key
@@ -631,7 +644,7 @@ class MULTI(RedisCommand):
     https://redis.io/docs/latest/commands/multi/
     """
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         pass
 
     async def execute(self):
@@ -645,7 +658,7 @@ class EXEC(RedisCommand):
     https://redis.io/docs/latest/commands/exec/
     """
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         pass
 
     async def execute(self):
@@ -659,7 +672,7 @@ class DISCARD(RedisCommand):
     https://redis.io/docs/latest/commands/discard/
     """
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         pass
 
     async def execute(self):
@@ -717,7 +730,7 @@ class REPLCONF(RedisCommand):
     is_get_ack: bool = False
     port: int | None = None
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match [arg.upper() for arg in args]:
             case []:
                 pass
@@ -742,7 +755,7 @@ class PSYNC(RedisCommand):
     https://redis.io/docs/latest/commands/psync/
     """
 
-    def __init__(self, *_args: list[str]):
+    def __init__(self, *_args: str):
         pass
 
     async def execute(self) -> list[bytes]:
@@ -764,9 +777,9 @@ class WAIT(RedisCommand):
     """
 
     min_replicas: int
-    timeout: float
+    timeout: float | None
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [min_replicas, timeout]:
                 self.min_replicas = int(min_replicas)
@@ -819,7 +832,7 @@ class CONFIG(RedisCommand):
     DIR: ClassVar[str] = "dir"
     DBFILENAME: ClassVar[str] = "dbfilename"
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match [arg.lower() for arg in args]:
             case ["get", *params]:
                 self.params = params
@@ -846,7 +859,7 @@ class KEYS(RedisCommand):
 
     pattern: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [pattern]:
                 self.pattern = pattern
@@ -869,7 +882,7 @@ class SUBSCRIBE(RedisCommand):
 
     channel: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [channel]:
                 self.channel = channel
@@ -892,7 +905,7 @@ class UNSUBSCRIBE(RedisCommand):
 
     channel: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [channel]:
                 self.channel = channel
@@ -913,7 +926,7 @@ class PSUBSCRIBE(RedisCommand):
     https://redis.io/docs/latest/commands/psubscribe/
     """
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         pass
 
     async def execute(self):
@@ -927,7 +940,7 @@ class PUNSUBSCRIBE(RedisCommand):
     https://redis.io/docs/latest/commands/punsubscribe/
     """
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         pass
 
     async def execute(self):
@@ -941,7 +954,7 @@ class QUIT(RedisCommand):
     https://redis.io/docs/latest/commands/quit/
     """
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         pass
 
     async def execute(self):
@@ -1110,7 +1123,7 @@ class ZSCORE(RedisCommand):
     set_name: str
     member: str
 
-    def __init__(self, *args: list[str]):
+    def __init__(self, *args: str):
         match args:
             case [set_name, member]:
                 self.set_name = set_name

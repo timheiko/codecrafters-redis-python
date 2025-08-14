@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from io import BufferedRandom
 from os import path
 import time
-from typing import Optional, Self
+from typing import Any, Optional, Self
 
 from app.log import log
 
@@ -38,12 +38,13 @@ class StreamEntry:
                     idx=f"{idx_ms}-{seq_num}",
                     field_values=self.field_values,
                     ts=self.ts,
-                )
+                )  # type: ignore
             case ["*"]:
-                idx_ms = int(time.time() * 1_000)
                 return StreamEntry(
-                    idx=f"{idx_ms}-0", field_values=self.field_values, ts=self.ts
-                )
+                    idx=f"{int(time.time() * 1_000)}-0",
+                    field_values=self.field_values,
+                    ts=self.ts,
+                )  # type: ignore
             case _:
                 return self
 
@@ -52,7 +53,7 @@ class StreamEntry:
 class Stream:
     entries: list[StreamEntry]
 
-    def __init__(self, *entries: list[StreamEntry]):
+    def __init__(self, *entries: StreamEntry):
         self.entries = list(entries)
 
     def append(self, entry: StreamEntry) -> StreamEntry:
@@ -85,7 +86,7 @@ class Storage:
         if dirname is not None and dbfilename is not None:
             self.__storage |= load_from_rdb_dump(dirname, dbfilename)
 
-    def get(self, key: str) -> Optional[any]:
+    def get(self, key: str) -> Optional[Any]:
         if key in self.__storage:
             value, expiration = self.__storage[key]
             if int(datetime.now().timestamp() * 1_000) >= expiration:
@@ -95,16 +96,16 @@ class Storage:
                 return value
         return None
 
-    def set(self, key: str, value: any, duration_ms: int = 10**10) -> None:
+    def set(self, key: str, value: Any, duration_ms: int = 10**10) -> None:
         self.__storage[key] = (
             value,
             int(datetime.now().timestamp() * 1_000) + duration_ms,
         )
 
-    def get_list(self, key: str) -> list[any]:
+    def get_list(self, key: str) -> list[Any]:
         return self.get(key) or []
 
-    def get_list_range(self, key: str, start: int, end: int) -> list[any]:
+    def get_list_range(self, key: str, start: int, end: int) -> list[Any]:
         values = self.get_list(key)
         n = len(values)
         start = start if start >= 0 else max(0, n + start)
@@ -134,7 +135,7 @@ class Storage:
 storage = Storage()
 
 
-def load_from_rdb_dump(dirname: str, dbfilename: str) -> dict[str, tuple[any, int]]:
+def load_from_rdb_dump(dirname: str, dbfilename: str) -> dict[str, tuple[Any, int]]:
     def read_int(file: BufferedRandom, count: int) -> int:
         return int.from_bytes(file.read(count), byteorder="big")
 
@@ -158,8 +159,10 @@ def load_from_rdb_dump(dirname: str, dbfilename: str) -> dict[str, tuple[any, in
                         return -4
                     case _:
                         raise ValueError(f"Unknown special format {last_six_bits}")
+            case _:
+                raise ValueError
 
-    def read_var_length_value(file: BufferedRandom) -> any:
+    def read_var_length_value(file: BufferedRandom) -> Any:
         size = read_size(file)
         match size:
             case -1:
@@ -172,14 +175,14 @@ def load_from_rdb_dump(dirname: str, dbfilename: str) -> dict[str, tuple[any, in
                 value = file.read(size).decode()
                 return value
 
-    def read_key_value(file: BufferedRandom) -> tuple[str, any]:
+    def read_key_value(file: BufferedRandom) -> tuple[str, Any]:
         value_type = file.read(1)
         key = read_var_length_value(file)
         match value_type:
             case b"\x00":  # string
                 return (key, read_var_length_value(file))
             case _:
-                raise ValueError(f"Unknown value type: {value_type}")
+                raise ValueError(f"Unknown value type: {value_type!r}")
 
     rdbpath = path.join(dirname, dbfilename)
     if not path.exists(rdbpath):

@@ -4,7 +4,6 @@ from app.storage import Storage, Stream, StreamEntry
 
 
 class TestStorage(unittest.TestCase):
-
     def setUp(self):
         self.storage = Storage()
 
@@ -34,7 +33,7 @@ class TestStorage(unittest.TestCase):
     def test_get_missing_list_range(self):
         self.assertEqual(self.storage.get_list_range("list", 0, 1), [])
 
-    def test_get_list_range(self):
+    def test_get_list_range_start_greater_than_stop(self):
         self.storage.set("list", [1, "2", 3])
 
         self.assertEqual(self.storage.get_list_range("list", 3, 2), [])
@@ -63,7 +62,8 @@ class TestStorage(unittest.TestCase):
 
     def test_get_list_negative_range3(self):
         self.storage.set(
-            "blueberry", ["raspberry", "grape", "orange", "mango", "pear", "banana"]
+            "blueberry",
+            ["raspberry", "grape", "orange", "mango", "pear", "banana"],
         )
 
         self.assertEqual(
@@ -71,9 +71,10 @@ class TestStorage(unittest.TestCase):
             ["raspberry", "grape", "orange", "mango", "pear", "banana"],
         )
 
-    def test_get_list_negative_range3(self):
+    def test_get_list_negative_range4(self):
         self.storage.set(
-            "blueberry", ["raspberry", "grape", "orange", "mango", "pear", "banana"]
+            "blueberry",
+            ["raspberry", "grape", "orange", "mango", "pear", "banana"],
         )
 
         self.assertEqual(

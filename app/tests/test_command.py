@@ -45,7 +45,6 @@ from app.storage import Stream, storage
 
 
 class TestCommand(unittest.IsolatedAsyncioTestCase):
-
     async def asyncSetUp(self):
         storage.clean()
 
@@ -220,7 +219,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         storage.set(key, values)
         self.assertEqual(await LLEN(key).execute(), f":{len(values)}\r\n".encode())
 
-    async def test_llen_exists(self):
+    async def test_llen_missing(self):
         key = "vegetables"
         self.assertEqual(await LLEN(key).execute(), b":0\r\n")
 
@@ -237,7 +236,8 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         key, values = "fruit lpop many", "apple banana strawberry".split()
         storage.set(key, values)
         self.assertEqual(
-            await LPOP(key, "2").execute(), b"*2\r\n$5\r\napple\r\n$6\r\nbanana\r\n"
+            await LPOP(key, "2").execute(),
+            b"*2\r\n$5\r\napple\r\n$6\r\nbanana\r\n",
         )
 
     async def test_lrange_constractor(self):
@@ -293,7 +293,8 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             task_group.create_task(RPUSH(key, value).execute())
 
         self.assertEqual(
-            blpop.result(), b"*2\r\n$19\r\nmy_list_blpop_rpush\r\n$5\r\nmango\r\n"
+            blpop.result(),
+            b"*2\r\n$19\r\nmy_list_blpop_rpush\r\n$5\r\nmango\r\n",
         )
 
     async def test_blpop_blocking_lpush(self):
@@ -304,7 +305,8 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             task_group.create_task(LPUSH(key, value).execute())
 
         self.assertEqual(
-            blpop.result(), b"*2\r\n$19\r\nmy_list_blpop_lpush\r\n$4\r\npear\r\n"
+            blpop.result(),
+            b"*2\r\n$19\r\nmy_list_blpop_lpush\r\n$4\r\npear\r\n",
         )
 
     async def test_type_missing(self):
@@ -332,9 +334,11 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await TYPE(key).execute(), b"+stream\r\n")
 
     async def test_xadd_construtor_even_field_values(self):
-        key, idx, *field_values = (
-            "stream_key 1526919030474-0 temperature 36 humidity 95".split()
-        )
+        (
+            key,
+            idx,
+            *field_values,
+        ) = "stream_key 1526919030474-0 temperature 36 humidity 95".split()
 
         cmd = XADD(key, idx, *field_values)
 
@@ -344,19 +348,24 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
     @unittest.expectedFailure
     async def test_xadd_construtor_odd_field_values(self):
-        key, idx, *field_values = (
-            "stream_key 1526919030474-0 temperature 36 humidity 95 dangling-field".split()
-        )
+        (
+            key,
+            idx,
+            *field_values,
+        ) = "stream_key 1526919030474-0 temperature 36 humidity 95 dangling-field".split()
 
         XADD(key, idx, *field_values)
 
     async def test_xadd_execute(self):
-        key, idx, *field_values = (
-            "stream_key 1526919030474-0 temperature 36 humidity 95".split()
-        )
+        (
+            key,
+            idx,
+            *field_values,
+        ) = "stream_key 1526919030474-0 temperature 36 humidity 95".split()
 
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$15\r\n1526919030474-0\r\n"
+            await XADD(key, idx, *field_values).execute(),
+            b"$15\r\n1526919030474-0\r\n",
         )
 
         self.assertIsNotNone(storage.get(key))
@@ -420,7 +429,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             await XADD(key, idx, *field_values).execute(), b"$3\r\n0-1\r\n"
         )
 
-    async def test_xadd_execute_star_idx_seq_num_multiple(self):
+    async def test_xadd_execute_star_idx_seq_num_multiple2(self):
         key, idx, *field_values = "stream_key 1-1 foo bar".split()
         self.assertEqual(
             await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
@@ -475,7 +484,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             b"*2\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
         )
 
-    async def test_xrange(self):
+    async def test_xrange_minus_plus(self):
         await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
         await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
         await XADD(*"stream_key_xrange 0-3 baz foo".split()).execute()
@@ -557,7 +566,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
             b"*2\r\n*2\r\n$19\r\nstream_key_xrange_1\r\n*2\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$19\r\nstream_key_xrange_2\r\n*1\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n",
         )
 
-    @unittest.skip
+    @unittest.skip(
+        "TODO: Make the first task wait for the result produced by the second one"
+    )
     async def test_xread_blocking(self):
         async with asyncio.TaskGroup() as task_group:
             xread = task_group.create_task(
@@ -654,10 +665,10 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(payloads[1])
 
-    async def test_wait_0_60000(self):
+    async def test_wait_5_0(self):
         cmd = WAIT(*"5 0".split())
 
-        self.assertEqual(cmd.minreplicas, 5)
+        self.assertEqual(cmd.min_replicas, 5)
         self.assertIsNone(cmd.timeout)
 
     async def test_wait_0_60000(self):

@@ -17,7 +17,7 @@ async def execute_command(
     command: list[str] | str,
     *,
     offset_delta: int = 0,
-):
+) -> None:
     log("command", command, id(session.reader))
     match command:
         case [cmd, *args] if cmd in registry:
@@ -26,8 +26,7 @@ async def execute_command(
             )
             payload = b"".join(payloads)
             log("payload >>>", payload)
-            session.writer.write(payload)
-            await session.writer.drain()
+            await session.write(payload)
 
             if registry[cmd] == PSYNC:
                 context.replicas.append((session.reader, session.writer))
@@ -38,7 +37,7 @@ async def execute_command(
             log("Unknown command", command)
 
 
-async def handle_connection(reader: StreamReader, writer: StreamWriter):
+async def handle_connection(reader: StreamReader, writer: StreamWriter) -> None:
     session = Session(reader, writer)
     while len(data := await reader.read(1024)) > 0:
         commands = decode_commands(data)
@@ -48,7 +47,7 @@ async def handle_connection(reader: StreamReader, writer: StreamWriter):
             await execute_command(session, command, offset_delta=offset_delta)
 
 
-async def handle_commands(reader: StreamReader, writer: StreamWriter):
+async def handle_commands(reader: StreamReader, writer: StreamWriter) -> None:
     await handle_connection(reader, writer)
 
     # if (reader, writer) not in context.replicas:

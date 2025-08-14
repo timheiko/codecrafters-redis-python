@@ -1,20 +1,21 @@
-from .log import log
+from typing import Any
+from app.log import log
 
 LINE_SEPARATOR = b"\r\n"
 
 
-def encode(data: any) -> bytes:
+def encode(data: Any) -> bytes:
     """
     Encode data into RESP format to send it to client
     https://redis-doc-test.readthedocs.io/en/latest/topics/protocol/
     """
     match data:
-        case str(_):
+        case str(value):
             return (
                 b"$"
                 + str(len(data)).encode()
                 + LINE_SEPARATOR
-                + data.encode()
+                + value.encode()
                 + LINE_SEPARATOR
             )
         case int(value):
@@ -31,7 +32,7 @@ def encode(data: any) -> bytes:
                 + b"".join(encode(item) for item in data)
             )
         case ValueError():
-            return f"-ERR {" ".join(data.args)}".encode() + LINE_SEPARATOR
+            return f"-ERR {' '.join(data.args)}".encode() + LINE_SEPARATOR
         case bytes(_):
             return f"${len(data)}".encode() + LINE_SEPARATOR + data
         case {**kwargs}:
@@ -40,7 +41,7 @@ def encode(data: any) -> bytes:
                 f"%{len(kwargs)}".encode()
                 + LINE_SEPARATOR
                 + b"".join(
-                    encode_simple(key) + encode(value) for key, value in kwargs.items()
+                    encode_simple(key) + encode(value) for key, value in kwargs.items()  # type: ignore
                 )
             )
         case _:
@@ -59,9 +60,9 @@ def encode_simple(data: str) -> bytes:
             raise Exception(f"Unsupported encoding data type: {type(data)}: {data}")
 
 
-def decode(payload: bytes):
+def decode(payload: bytes) -> list[Any]:
     n, offset = len(payload), 0
-    decoded = []
+    decoded: list[Any] = []
     while offset < n:
         item, offset = __decode(payload, offset)
         if offset == n and not len(decoded):
@@ -70,7 +71,7 @@ def decode(payload: bytes):
     return decoded
 
 
-def __decode(payload: bytes, offset: int = 0) -> tuple[any, int]:
+def __decode(payload: bytes, offset: int = 0) -> tuple[Any, int]:
     if offset == 0:
         log("payload <<<", payload)
     i = offset
@@ -109,7 +110,7 @@ def __decode(payload: bytes, offset: int = 0) -> tuple[any, int]:
             raise Exception(f"Unknown data type: {chr(payload[i])}")
 
 
-def decode_bulk_string(payload: bytes, offset: int) -> tuple[bytes, int]:
+def decode_bulk_string(payload: bytes, offset: int) -> tuple[str | bytes, int]:
     if payload[offset : offset + 1] == "$".encode():
         new_line_sep_pos = payload.find(LINE_SEPARATOR, offset + 1)
         length = int(payload[offset + 1 : new_line_sep_pos])
@@ -124,10 +125,10 @@ def decode_bulk_string(payload: bytes, offset: int) -> tuple[bytes, int]:
             log("content length >>>", length, content)
             return (content, content_end)
 
-    raise Exception(f"Cannot parse text from payload at offset {offset}: {payload}")
+    raise Exception(f"Cannot parse text from payload at offset {offset}: {payload!r}")
 
 
-def decode_commands(data: bytes):
+def decode_commands(data: bytes) -> list[tuple[str, int]]:
     n, offset, commands = len(data), 0, []
     while offset < n:
         command, next_offset = __decode(data, offset)

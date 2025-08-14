@@ -1003,17 +1003,46 @@ class ZADD(RedisCommand):
 
     set_name: str
     priority: float
-    value: str
+    member: str
 
     def __init__(self, *args):
         match args:
-            case [set_name, priority, value]:
+            case [set_name, priority, member]:
                 self.set_name = set_name
                 self.priority = float(priority)
-                self.value = value
+                self.member = member
             case _:
                 raise ValueError
 
     async def execute(self):
-        added = storage.add_to_sorted_set(self.set_name, self.priority, self.value)
+        added = storage.add_to_sorted_set(self.set_name, self.priority, self.member)
         return encode(int(added))
+
+
+@registry.register
+@dataclass
+class ZRANK(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/zrank/
+    """
+
+    set_name: str
+    member: str
+
+    def __init__(self, *args):
+        match args:
+            case [set_name, member]:
+                self.set_name = set_name
+                self.member = member
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        sorted_set = storage.get_sorted_set(self.set_name)
+        if self.member not in sorted_set:
+            return encode(None)
+
+        sorted_items = sorted(sorted_set.items(), key=lambda item: (item[-1], item[0]))
+        src = [member for member, _ in sorted_items]
+        index = src.index(self.member)
+        return encode(index)

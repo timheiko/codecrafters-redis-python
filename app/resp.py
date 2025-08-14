@@ -17,8 +17,10 @@ def encode(data: any) -> bytes:
                 + data.encode()
                 + LINE_SEPARATOR
             )
-        case int(_):
-            return b":" + str(data).encode() + LINE_SEPARATOR
+        case int(value):
+            return b":" + str(value).encode() + LINE_SEPARATOR
+        case float(value):
+            return b"," + str(value).encode() + LINE_SEPARATOR
         case None:
             return b"$-1" + LINE_SEPARATOR
         case [*_]:
@@ -90,9 +92,12 @@ def __decode(payload: bytes, offset: int = 0) -> tuple[any, int]:
             )
         case b":":
             new_line_sep_pos = payload.find(LINE_SEPARATOR, i + 1)
-            return int(
-                payload[i + 1 : new_line_sep_pos].decode()
-            ), new_line_sep_pos + len(LINE_SEPARATOR)
+            content = payload[i + 1 : new_line_sep_pos].decode()
+            return int(content), new_line_sep_pos + len(LINE_SEPARATOR)
+        case b",":
+            new_line_sep_pos = payload.find(LINE_SEPARATOR, i + 1)
+            content = payload[i + 1 : new_line_sep_pos].decode()
+            return float(content), new_line_sep_pos + len(LINE_SEPARATOR)
         case b"$":
             text, i = decode_bulk_string(payload, i)
             return text, i

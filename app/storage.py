@@ -123,10 +123,10 @@ class Storage:
     def get_sorted_set(self, set_name: str) -> dict[str, float]:
         return self.get(set_name) or {}
 
-    def add_to_sorted_set(self, set_name: str, priority: float, value: str) -> bool:
+    def add_to_sorted_set(self, set_name: str, priority: float, member: str) -> bool:
         sorted_set = self.get_sorted_set(set_name)
-        is_new = value not in sorted_set
-        sorted_set[value] = priority
+        is_new = member not in sorted_set
+        sorted_set[member] = priority
         self.set(set_name, sorted_set)
         return is_new
 

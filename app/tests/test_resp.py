@@ -19,6 +19,9 @@ class RespTest(unittest.TestCase):
     def test_encode_int(self):
         self.assertEqual(encode(10), b":10\r\n")
 
+    def test_encode_float(self):
+        self.assertEqual(encode(4.2), b",4.2\r\n")
+
     def test_encode_null(self):
         self.assertEqual(encode(None), b"$-1\r\n")
 
@@ -52,6 +55,9 @@ class RespTest(unittest.TestCase):
 
     def test_decode_int(self):
         self.assertEqual(decode(encode(2)), 2)
+
+    def test_decode_float(self):
+        self.assertEqual(decode(encode(5.1)), 5.1)
 
     def test_decode_bulk_string(self):
         self.assertEqual(decode(encode("value")), "value")

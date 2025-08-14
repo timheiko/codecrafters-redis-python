@@ -29,6 +29,8 @@ from app.command import (
     XADD,
     XRANGE,
     XREAD,
+    ZADD,
+    ZRANK,
     CommandRegistry,
     Context,
     Session,
@@ -736,6 +738,42 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(session.unsubscribe("my_channel_2"))
         self.assertEqual(session.subscriptions(), 0)
+
+    async def test_zrank_present(self):
+        context = Context(Args())
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
+        await ZADD(*"zset_key 20.0 baz".split()).set_context(context).execute()
+        await ZADD(*"zset_key 30.1 caz".split()).set_context(context).execute()
+        await ZADD(*"zset_key 40.2 paz".split()).set_context(context).execute()
+
+        self.assertEqual(
+            await ZRANK(*"zset_key baz".split()).set_context(context).execute(),
+            encode(0),
+        )
+        self.assertEqual(
+            await ZRANK(*"zset_key caz".split()).set_context(context).execute(),
+            encode(1),
+        )
+        self.assertEqual(
+            await ZRANK(*"zset_key paz".split()).set_context(context).execute(),
+            encode(2),
+        )
+        self.assertEqual(
+            await ZRANK(*"zset_key bar".split()).set_context(context).execute(),
+            encode(3),
+        )
+        self.assertEqual(
+            await ZRANK(*"zset_key foo".split()).set_context(context).execute(),
+            encode(4),
+        )
+
+    async def test_zrank_missing(self):
+        context = Context(Args())
+
+        cmd = ZRANK(*"my_sorted_set banana".split()).set_context(context)
+
+        self.assertEqual(await cmd.execute(), b"$-1\r\n")
 
 
 if __name__ == "__main__":

@@ -102,3 +102,6 @@ redis-cli CONFIG GET dir dbfilename
 redis-cli ZADD my_sorted_set 0.1 banana
 redis-cli ZADD my_sorted_set 0.5 pear
 redis-cli ZADD my_sorted_set 0.8 banana
+
+redis-cli ZRANK my_sorted_set banana
+redis-cli ZRANK my_sorted_set missing

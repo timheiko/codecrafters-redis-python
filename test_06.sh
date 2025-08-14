@@ -97,4 +97,8 @@ redis-cli WAIT 0 60000
 
 redis-cli CONFIG GET dir dbfilename
 
-redis-cli SUBSCRIBE my-chan
+# redis-cli SUBSCRIBE my-chan
+
+redis-cli ZADD my_sorted_set 0.1 banana
+redis-cli ZADD my_sorted_set 0.5 pear
+redis-cli ZADD my_sorted_set 0.8 banana

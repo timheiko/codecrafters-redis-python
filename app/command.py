@@ -992,3 +992,28 @@ class COMMAND(RedisCommand):
 
     async def execute(self):
         return encode([])
+
+
+@registry.register
+@dataclass
+class ZADD(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/zadd/
+    """
+
+    set_name: str
+    priority: float
+    value: str
+
+    def __init__(self, *args):
+        match args:
+            case [set_name, priority, value]:
+                self.set_name = set_name
+                self.priority = float(priority)
+                self.value = value
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        added = storage.add_to_sorted_set(self.set_name, self.priority, self.value)
+        return encode(int(added))

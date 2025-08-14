@@ -212,3 +212,11 @@ class TestStorage(unittest.TestCase):
         self.storage.load_from_rdb_dump("dumps", "dump-strings.rdb")
 
         self.assertEqual(self.storage.get("foo_px"), "bar_px")
+
+    def test_add_to_sorted_set(self):
+        self.assertTrue(self.storage.add_to_sorted_set("my_sorted_set", 0.1, "banana"))
+        self.assertTrue(self.storage.add_to_sorted_set("my_sorted_set", 0.5, "pear"))
+
+    def test_add_to_sorted_set_duplicates(self):
+        self.assertTrue(self.storage.add_to_sorted_set("my_sorted_set", 0.1, "banana"))
+        self.assertFalse(self.storage.add_to_sorted_set("my_sorted_set", 0.5, "banana"))

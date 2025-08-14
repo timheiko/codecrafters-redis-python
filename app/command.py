@@ -1098,3 +1098,28 @@ class ZCARD(RedisCommand):
     async def execute(self):
         sorted_set = storage.get_sorted_set(self.set_name)
         return encode(len(sorted_set))
+
+
+@registry.register
+@dataclass
+class ZSCORE(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/zscore/
+    """
+
+    set_name: str
+    member: str
+
+    def __init__(self, *args: list[str]):
+        match args:
+            case [set_name, member]:
+                self.set_name = set_name
+                self.member = member
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        sorted_set = storage.get_sorted_set(self.set_name)
+        if self.member not in sorted_set:
+            return encode(None)
+        return encode(str(sorted_set.get(self.member)))

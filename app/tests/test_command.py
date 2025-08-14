@@ -33,6 +33,7 @@ from app.command import (
     ZCARD,
     ZRANGE,
     ZRANK,
+    ZSCORE,
     CommandRegistry,
     Context,
     Session,
@@ -834,6 +835,39 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             decode(await ZCARD("zset_key").set_context(context).execute()), 0
+        )
+
+    async def test_zscore(self):
+        context = Context(Args())
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
+        await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
+
+        self.assertEqual(
+            await ZSCORE(*"zset_key bar".split()).set_context(context).execute(),
+            encode("100.0"),
+        )
+
+    async def test_zscore_missing_member(self):
+        context = Context(Args())
+
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
+
+        self.assertEqual(
+            await ZSCORE(*"zset_key missing_key".split())
+            .set_context(context)
+            .execute(),
+            encode(None),
+        )
+
+    async def test_zscore_missing_member_set(self):
+        context = Context(Args())
+
+        self.assertEqual(
+            await ZSCORE(*"missing_set missing_key".split())
+            .set_context(context)
+            .execute(),
+            encode(None),
         )
 
 

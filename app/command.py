@@ -1070,7 +1070,10 @@ class ZRANGE(RedisCommand):
 
     async def execute(self):
         sorted_set = storage.get_sorted_set(self.set_name)
+        n = len(sorted_set)
+        start = self.start if self.start >= 0 else max(0, n + self.start)
+        stop = (self.stop if self.stop >= 0 else max(0, n + self.stop)) + 1
 
         sorted_items = sorted(sorted_set.items(), key=lambda item: (item[-1], item[0]))
         zrange = [member for member, _ in sorted_items]
-        return encode(zrange[self.start : self.stop + 1])
+        return encode(zrange[start:stop])

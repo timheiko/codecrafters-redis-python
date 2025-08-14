@@ -776,7 +776,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(await cmd.execute(), b"$-1\r\n")
 
-    async def test_zrange_present(self):
+    async def test_zrange(self):
         context = Context(Args())
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
         await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
@@ -789,6 +789,33 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
                 await ZRANGE(*"zset_key 2 4".split()).set_context(context).execute()
             ),
             ["paz", "bar", "foo"],
+        )
+
+    async def test_zrange_negative_indexes(self):
+        context = Context(Args())
+        await ZADD(*"racer_scores 8.5 Sam-Bodden".split()).set_context(
+            context
+        ).execute()
+        await ZADD(*"racer_scores 10.2 Royce".split()).set_context(context).execute()
+        await ZADD(*"racer_scores 6.1 Ford".split()).set_context(context).execute()
+        await ZADD(*"racer_scores 14.9 Prickett".split()).set_context(context).execute()
+        await ZADD(*"racer_scores 10.2 Ben".split()).set_context(context).execute()
+
+        self.assertEqual(
+            decode(
+                await ZRANGE(*"racer_scores -2 -1".split())
+                .set_context(context)
+                .execute()
+            ),
+            ["Royce", "Prickett"],
+        )
+        self.assertEqual(
+            decode(
+                await ZRANGE(*"racer_scores 0 -3".split())
+                .set_context(context)
+                .execute()
+            ),
+            ["Ford", "Sam-Bodden", "Ben"],
         )
 
 

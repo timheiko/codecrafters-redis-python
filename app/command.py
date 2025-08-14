@@ -1046,3 +1046,31 @@ class ZRANK(RedisCommand):
         src = [member for member, _ in sorted_items]
         index = src.index(self.member)
         return encode(index)
+
+
+@registry.register
+@dataclass
+class ZRANGE(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/zrange/
+    """
+
+    set_name: str
+    start: int
+    stop: int
+
+    def __init__(self, *args):
+        match args:
+            case [set_name, start, stop]:
+                self.set_name = set_name
+                self.start = int(start)
+                self.stop = int(stop)
+            case _:
+                raise ValueError
+
+    async def execute(self):
+        sorted_set = storage.get_sorted_set(self.set_name)
+
+        sorted_items = sorted(sorted_set.items(), key=lambda item: (item[-1], item[0]))
+        zrange = [member for member, _ in sorted_items]
+        return encode(zrange[self.start : self.stop + 1])

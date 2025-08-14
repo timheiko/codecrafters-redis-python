@@ -30,6 +30,7 @@ from app.command import (
     XRANGE,
     XREAD,
     ZADD,
+    ZRANGE,
     ZRANK,
     CommandRegistry,
     Context,
@@ -774,6 +775,21 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         cmd = ZRANK(*"my_sorted_set banana".split()).set_context(context)
 
         self.assertEqual(await cmd.execute(), b"$-1\r\n")
+
+    async def test_zrange_present(self):
+        context = Context(Args())
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
+        await ZADD(*"zset_key 20.0 baz".split()).set_context(context).execute()
+        await ZADD(*"zset_key 30.1 caz".split()).set_context(context).execute()
+        await ZADD(*"zset_key 40.2 paz".split()).set_context(context).execute()
+
+        self.assertEqual(
+            decode(
+                await ZRANGE(*"zset_key 2 4".split()).set_context(context).execute()
+            ),
+            ["paz", "bar", "foo"],
+        )
 
 
 if __name__ == "__main__":

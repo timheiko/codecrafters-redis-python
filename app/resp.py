@@ -32,6 +32,15 @@ def encode(data: any) -> bytes:
             return f"-ERR {" ".join(data.args)}".encode() + LINE_SEPARATOR
         case bytes(_):
             return f"${len(data)}".encode() + LINE_SEPARATOR + data
+        case {**kwargs}:
+            # https://redis.io/docs/latest/develop/reference/protocol-spec/#maps
+            return (
+                f"%{len(kwargs)}".encode()
+                + LINE_SEPARATOR
+                + b"".join(
+                    encode_simple(key) + encode(value) for key, value in kwargs.items()
+                )
+            )
         case _:
             raise Exception(f"Unsupported encoding data type: {type(data)}: {data}")
 

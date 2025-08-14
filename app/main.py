@@ -20,7 +20,7 @@ async def execute_command(
 ):
     log("command", command, id(session.reader))
     match command:
-        case [cmd, *args]:
+        case [cmd, *args] if cmd in registry:
             payloads = await registry.execute(
                 id(session.reader), context, session, cmd, *args
             )
@@ -35,7 +35,7 @@ async def execute_command(
 
             context.offset += offset_delta
         case _:
-            pass
+            log("Unknown command", command)
 
 
 async def handle_connection(reader: StreamReader, writer: StreamWriter):
@@ -44,6 +44,7 @@ async def handle_connection(reader: StreamReader, writer: StreamWriter):
         commands = decode_commands(data)
         log("commands", commands)
         for command, offset_delta in commands:
+            log("execute_command", command, offset_delta)
             await execute_command(session, command, offset_delta=offset_delta)
 
 

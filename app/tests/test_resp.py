@@ -98,6 +98,11 @@ class RespTest(unittest.TestCase):
 
         self.assertEqual(decode_commands(data), [(["REPLCONF", "GETACK", "*"], 37)])
 
+    def test_decode_redis_cli_on_connect(self):
+        data = b"*2\r\n$7\r\nCOMMAND\r\n$4\r\nDOCS\r\n"
+
+        self.assertEqual(decode_commands(data), [(["COMMAND", "DOCS"], 27)])
+
     def test_decode_commands_batch(self):
         batch = b"*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n*3\r\n$3\r\nSET\r\n$3\r\nbar\r\n$3\r\n456\r\n*3\r\n$3\r\nSET\r\n$3\r\nbaz\r\n$3\r\n789\r\n"
         self.assertEqual(
@@ -108,6 +113,12 @@ class RespTest(unittest.TestCase):
                 (["SET", "baz", "789"], 31),
             ],
             batch,
+        )
+
+    def test_encode_dict(self):
+        self.assertEqual(
+            encode({"first": 1, "second": 2}),
+            b"%2\r\n+first\r\n:1\r\n+second\r\n:2\r\n",
         )
 
 

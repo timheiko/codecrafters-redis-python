@@ -142,7 +142,10 @@ class CommandRegistry:
         return self.__registry[key.upper()]
 
     def __contains__(self, key):
-        return key in self.__registry
+        return key.upper() in self.__registry
+
+    def __iter__(self):
+        return iter(self.__registry.keys())
 
 
 registry = CommandRegistry()
@@ -973,3 +976,19 @@ class PUBLISH(RedisCommand):
             except Exception as e:
                 log(e)
         return encode(count)
+
+
+@registry.register
+@dataclass
+class COMMAND(RedisCommand):
+    """
+    https://redis.io/docs/latest/commands/command/
+    https://redis.io/docs/latest/commands/command-docs/
+    https://redis.io/docs/latest/commands/command-count/
+    """
+
+    def __init__(self, *_args):
+        pass
+
+    async def execute(self):
+        return encode([])

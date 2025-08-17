@@ -89,9 +89,7 @@ async def handshake():
 
 
 async def main():
-    loop = asyncio.get_running_loop()
-    for sig in (SIGTERM, SIGINT):
-        loop.add_signal_handler(sig, signal_handler, sig)
+    await add_signal_handlers()
 
     server = await asyncio.start_server(
         handle_connection, "localhost", context.args.port
@@ -110,13 +108,18 @@ async def main():
         log("Shutting down")
 
 
-def signal_handler(sig: int) -> None:
+async def add_signal_handlers() -> None:
     loop = asyncio.get_running_loop()
-    for task in asyncio.all_tasks(loop=loop):
-        task.cancel()
-    print(f"Got signal: {sig!s}, shutting down.")
-    loop.remove_signal_handler(SIGTERM)
-    loop.add_signal_handler(SIGINT, lambda: None)
+
+    def signal_handler(sig: int) -> None:
+        for task in asyncio.all_tasks(loop=loop):
+            task.cancel()
+        log(f"Got signal: {sig!s}, shutting down.")
+        loop.remove_signal_handler(SIGTERM)
+        loop.add_signal_handler(SIGINT, lambda: None)
+
+    for sig in (SIGTERM, SIGINT):
+        loop.add_signal_handler(sig, signal_handler, sig)
 
 
 if __name__ == "__main__":

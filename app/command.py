@@ -5,25 +5,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, ClassVar, Mapping, Self, Sequence
 
-from app.args import Args
+from app.context import Context
 from app.log import log
 from app.resp import decode, encode, encode_simple
 
 from app.storage import Stream, StreamEntry, storage
-
-
-@dataclass
-class Context:
-    args: Args
-    offset: int
-    replicas: list[Any]
-    need_preplica_ack: bool
-
-    def __init__(self, args: Args, offset: int = 0):
-        self.args = args
-        self.offset = offset
-        self.replicas = []
-        self.need_preplica_ack: bool = False
 
 
 @dataclass

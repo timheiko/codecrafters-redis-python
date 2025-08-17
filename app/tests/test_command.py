@@ -65,7 +65,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(EXEC)
 
         transaction_id = 1
-        context = Context(Args())
+        context = Context(args=Args())
         session = Session()
 
         self.assertEqual(
@@ -100,7 +100,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         transaction_id = 1
 
         self.assertEqual(
-            await registry.execute(transaction_id, Context(Args()), Session(), "EXEC"),
+            await registry.execute(
+                transaction_id, Context(args=Args()), Session(), "EXEC"
+            ),
             [encode(ValueError("EXEC without MULTI"))],
         )
 
@@ -112,7 +114,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
-        context = Context(Args())
+        context = Context(args=Args())
         session = Session()
         self.assertEqual(
             await registry.execute(transaction_id, context, session, "MULTI"),
@@ -139,7 +141,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
-        context = Context(Args())
+        context = Context(args=Args())
         session = Session()
 
         self.assertEqual(
@@ -623,7 +625,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
     async def test_info_replication_master(self):
         args = Args()
-        context = Context(args)
+        context = Context(args=args)
         self.assertEqual(
             await INFO("replication").set_context(context).execute(),
             encode(
@@ -636,14 +638,14 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_info_replication_slave(self):
         args = Args()
         args.replicaof = "localhost 1234"
-        context = Context(args)
+        context = Context(args=args)
         self.assertEqual(
             await INFO("replication").set_context(context).execute(),
             encode("role:slave"),
         )
 
     async def test_replconf_replica_ports(self):
-        context = Context(Args())
+        context = Context(args=Args())
         REPLCONF(*"listening-port 6767".split()).set_context(context)
 
     async def test_replconf(self):
@@ -683,7 +685,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         args = Args()
         args.dir = "/tmp"
         args.dbfilename = "dbfilename.rdb"
-        context = Context(args)
+        context = Context(args=args)
 
         cmd = CONFIG(*"get dir dbfilename".split()).set_context(context)
 
@@ -755,7 +757,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.subscriptions(), 0)
 
     async def test_zrank_present(self):
-        context = Context(Args())
+        context = Context(args=Args())
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
         await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
         await ZADD(*"zset_key 20.0 baz".split()).set_context(context).execute()
@@ -784,14 +786,14 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zrank_missing(self):
-        context = Context(Args())
+        context = Context(args=Args())
 
         cmd = ZRANK(*"my_sorted_set banana".split()).set_context(context)
 
         self.assertEqual(await cmd.execute(), b"$-1\r\n")
 
     async def test_zrange(self):
-        context = Context(Args())
+        context = Context(args=Args())
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
         await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
         await ZADD(*"zset_key 20.0 baz".split()).set_context(context).execute()
@@ -806,7 +808,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zrange_negative_indexes(self):
-        context = Context(Args())
+        context = Context(args=Args())
         await ZADD(*"racer_scores 8.5 Sam-Bodden".split()).set_context(
             context
         ).execute()
@@ -833,7 +835,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zcard(self):
-        context = Context(Args())
+        context = Context(args=Args())
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
         await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
         await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
@@ -843,14 +845,14 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zcard_missing(self):
-        context = Context(Args())
+        context = Context(args=Args())
 
         self.assertEqual(
             decode(await ZCARD("zset_key").set_context(context).execute()), 0
         )
 
     async def test_zscore(self):
-        context = Context(Args())
+        context = Context(args=Args())
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
         await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
         await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
@@ -861,7 +863,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zscore_missing_member(self):
-        context = Context(Args())
+        context = Context(args=Args())
 
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
 
@@ -873,7 +875,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zscore_missing_member_set(self):
-        context = Context(Args())
+        context = Context(args=Args())
 
         self.assertEqual(
             await ZSCORE(*"missing_set missing_key".split())
@@ -883,7 +885,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zrem(self):
-        context = Context(Args())
+        context = Context(args=Args())
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
         await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
         await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
@@ -894,7 +896,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zrem_missing_member(self):
-        context = Context(Args())
+        context = Context(args=Args())
 
         await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
 
@@ -904,7 +906,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_zrem_missing_member_set(self):
-        context = Context(Args())
+        context = Context(args=Args())
 
         self.assertEqual(
             await ZREM(*"missing_set missing_key".split())

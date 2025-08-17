@@ -487,14 +487,13 @@ class XRANGE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def apply(self) -> bytes:
+    async def apply(self) -> list[list[Sequence[str]]]:
         stream: Stream = storage.get_stream(self.key)
-        entries = [
+        return [
             [entry.idx, list(entry.field_values)]
             for entry in stream.entries
             if self.start <= entry.idx <= self.end
         ]
-        return entries
 
 
 @registry.register
@@ -537,7 +536,7 @@ class XREAD(RedisCommand):
             case _:
                 raise ValueError
 
-    async def apply(self) -> bytes:
+    async def apply(self):
         response = self.__query()
         match self.kind:
             case self.STREAMS:

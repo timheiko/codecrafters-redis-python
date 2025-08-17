@@ -12,3 +12,4 @@ class Context:
     offset: int = 0
     replicas: list[Any] = field(default_factory=list)
     need_preplica_ack: bool = False
+    storage: Storage = field(default_factory=Storage)

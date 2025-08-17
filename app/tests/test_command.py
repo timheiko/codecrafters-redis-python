@@ -624,8 +624,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await MULTI().execute(), b"+OK\r\n")
 
     async def test_info_replication_master(self):
-        args = Args()
-        context = Context(args=args)
+        context = Context(args=Args())
         self.assertEqual(
             await INFO("replication").set_context(context).execute(),
             encode(
@@ -636,9 +635,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_info_replication_slave(self):
-        args = Args()
-        args.replicaof = "localhost 1234"
-        context = Context(args=args)
+        context = Context(Args(replicaof="localhost 1234"))
         self.assertEqual(
             await INFO("replication").set_context(context).execute(),
             encode("role:slave"),
@@ -682,9 +679,7 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await cmd.execute(), encode(0))
 
     async def test_config(self):
-        args = Args()
-        args.dir = "/tmp"
-        args.dbfilename = "dbfilename.rdb"
+        args = Args(dir="/tmp", dbfilename="dbfilename.rdb")
         context = Context(args=args)
 
         cmd = CONFIG(*"get dir dbfilename".split()).set_context(context)

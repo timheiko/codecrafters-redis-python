@@ -2,7 +2,6 @@ import asyncio
 from asyncio import StreamReader, StreamWriter
 import os
 
-from app.storage import storage
 from app.args import parse_args
 from app.command import PSYNC, Context, Session, registry
 
@@ -10,8 +9,10 @@ from app.resp import decode, decode_commands, encode
 from app.log import log
 from signal import SIGINT, SIGTERM
 
+from app.storage import Storage
 
-context = Context(parse_args())
+
+context = Context(args=parse_args(), storage=Storage())
 
 
 async def execute_command(
@@ -100,7 +101,7 @@ async def main():
     log(f"Serving on {addrs}")
 
     await handshake()
-    storage.load_from_rdb_dump(context.args.dir, context.args.dbfilename)
+    context.storage.load_from_rdb_dump(context.args.dir, context.args.dbfilename)
 
     try:
         async with server:

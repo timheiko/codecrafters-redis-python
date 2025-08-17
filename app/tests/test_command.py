@@ -41,15 +41,12 @@ from app.command import (
 )
 
 from app.resp import decode, encode, encode_simple
-from app.storage import Stream, storage
+from app.storage import Storage, Stream
 
 
 class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        storage.clean()
-
-    async def asyncTearDown(self):
-        storage.clean()
+        self.context = Context(args=Args(), storage=Storage())
 
     def test_registry_register(self):
         registry = CommandRegistry()
@@ -65,30 +62,29 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(EXEC)
 
         transaction_id = 1
-        context = Context(args=Args())
         session = Session()
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "MULTI"),
+            await registry.execute(transaction_id, self.context, session, "MULTI"),
             [encode_simple("OK")],
         )
         self.assertEqual(
             await registry.execute(
-                transaction_id, context, session, "SET", "foo", "bar"
+                transaction_id, self.context, session, "SET", "foo", "bar"
             ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "GET", "foo"),
+            await registry.execute(transaction_id, self.context, session, "GET", "foo"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "EXEC"),
+            await registry.execute(transaction_id, self.context, session, "EXEC"),
             [encode(["OK", "bar"])],
         )
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "GET", "foo"),
+            await registry.execute(transaction_id, self.context, session, "GET", "foo"),
             [encode("bar")],
         )
 
@@ -101,7 +97,10 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(
             await registry.execute(
-                transaction_id, Context(args=Args()), Session(), "EXEC"
+                transaction_id=transaction_id,
+                context=self.context,
+                session=Session(),
+                command="EXEC",
             ),
             [encode(ValueError("EXEC without MULTI"))],
         )
@@ -114,24 +113,23 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
-        context = Context(args=Args())
         session = Session()
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "MULTI"),
+            await registry.execute(transaction_id, self.context, session, "MULTI"),
             [encode_simple("OK")],
         )
         self.assertEqual(
             await registry.execute(
-                transaction_id, context, session, "SET", "foo", "bar"
+                transaction_id, self.context, session, "SET", "foo", "bar"
             ),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "GET", "foo"),
+            await registry.execute(transaction_id, self.context, session, "GET", "foo"),
             [encode_simple("QUEUED")],
         )
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "DISCARD"),
+            await registry.execute(transaction_id, self.context, session, "DISCARD"),
             [encode_simple("OK")],
         )
 
@@ -141,11 +139,10 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         registry.register(DISCARD)
 
         transaction_id = 1
-        context = Context(args=Args())
         session = Session()
 
         self.assertEqual(
-            await registry.execute(transaction_id, context, session, "DISCARD"),
+            await registry.execute(transaction_id, self.context, session, "DISCARD"),
             [encode(ValueError("DISCARD without MULTI"))],
         )
 
@@ -194,57 +191,74 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
     async def test_set(self):
         key, value = "foo", "bar"
-        self.assertEqual(await SET(key, value).execute(), b"+OK\r\n")
-        self.assertEqual(storage.get(key), value)
+        self.assertEqual(
+            await SET(key, value).set_context(self.context).execute(), b"+OK\r\n"
+        )
+        self.assertEqual(self.context.storage.get(key), value)
 
     async def test_set_zero_px_ttl(self):
         key, value = "foo", "bar"
-        self.assertEqual(await SET(key, value, "px", "0").execute(), b"+OK\r\n")
-        self.assertIsNone(storage.get(key))
+        self.assertEqual(
+            await SET(key, value, "px", "0").set_context(self.context).execute(),
+            b"+OK\r\n",
+        )
+        self.assertIsNone(self.context.storage.get(key))
 
     async def test_set_long_px_ttl(self):
         key, value = "foo", "bar"
-        self.assertEqual(await SET(key, value, "px", "10").execute(), b"+OK\r\n")
-        self.assertEqual(storage.get(key), value)
+        self.assertEqual(
+            await SET(key, value, "px", "10").set_context(self.context).execute(),
+            b"+OK\r\n",
+        )
+        self.assertEqual(self.context.storage.get(key), value)
 
     async def test_get_exists(self):
         key, value = "foo", "bar"
-        storage.set(key, value)
-        self.assertEqual(await GET(key).execute(), b"$3\r\nbar\r\n")
+        self.context.storage.set(key, value)
+        self.assertEqual(
+            await GET(key).set_context(self.context).execute(), b"$3\r\nbar\r\n"
+        )
 
     async def test_get_does_not_exist(self):
         key = "foo"
-        self.assertEqual(await GET(key).execute(), b"$-1\r\n")
+        self.assertEqual(await GET(key).set_context(self.context).execute(), b"$-1\r\n")
 
     async def test_llen_exists(self):
         key, values = "fruit", "apple banana strawberry".split()
-        storage.set(key, values)
-        self.assertEqual(await LLEN(key).execute(), f":{len(values)}\r\n".encode())
+        self.context.storage.set(key, values)
+        self.assertEqual(
+            await LLEN(key).set_context(self.context).execute(),
+            f":{len(values)}\r\n".encode(),
+        )
 
     async def test_llen_missing(self):
         key = "vegetables"
-        self.assertEqual(await LLEN(key).execute(), b":0\r\n")
+        self.assertEqual(await LLEN(key).set_context(self.context).execute(), b":0\r\n")
 
     async def test_lpop_exists(self):
         key, values = "fruit lpop", "apple banana strawberry".split()
-        storage.set(key, values)
-        self.assertEqual(await LPOP(key).execute(), b"$5\r\napple\r\n")
+        self.context.storage.set(key, values)
+        self.assertEqual(
+            await LPOP(key).set_context(self.context).execute(), b"$5\r\napple\r\n"
+        )
 
     async def test_lpop_does_not_exist(self):
         key = "fruit lpop does not exit"
-        self.assertEqual(await LPOP(key).execute(), b"$-1\r\n")
+        self.assertEqual(
+            await LPOP(key).set_context(self.context).execute(), b"$-1\r\n"
+        )
 
     async def test_lpop_many_exists(self):
         key, values = "fruit lpop many", "apple banana strawberry".split()
-        storage.set(key, values)
+        self.context.storage.set(key, values)
         self.assertEqual(
-            await LPOP(key, "2").execute(),
+            await LPOP(key, "2").set_context(self.context).execute(),
             b"*2\r\n$5\r\napple\r\n$6\r\nbanana\r\n",
         )
 
     async def test_lrange_constractor(self):
         key, start, end = "my_list", "0", "-1"
-        command = LRANGE(key, start, end)
+        command = LRANGE(key, start, end).set_context(self.context)
 
         self.assertEqual(command.key, key)
         self.assertEqual(command.start, 0)
@@ -252,38 +266,38 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
 
     async def test_rpush_constractor(self):
         key, *items = ["my_list_rpush", "stone", "paper", "scissors"]
-        command = RPUSH(key, *items)
+        command = RPUSH(key, *items).set_context(self.context)
 
         self.assertEqual(command.key, key)
         self.assertEqual(command.items, ["stone", "paper", "scissors"])
 
     async def test_lpush_constractor(self):
-        key, *items = ["my_list_lpush", "Friede", "Freude", "Eierkuchen"]
-        command = LPUSH(key, *items)
+        key, *items = ["my_list_lpush", "Frieden", "Freude", "Eierkuchen"]
+        command = LPUSH(key, *items).set_context(self.context)
 
         self.assertEqual(command.key, key)
-        self.assertEqual(command.items, ["Friede", "Freude", "Eierkuchen"])
+        self.assertEqual(command.items, ["Frieden", "Freude", "Eierkuchen"])
 
     async def test_blpop_constractor_zero_timeout(self):
         key, timeout = "my_list_blpop", "0"
-        command = BLPOP(key, timeout)
+        command = BLPOP(key, timeout).set_context(self.context)
 
         self.assertEqual(command.key, key)
         self.assertEqual(command.timeout, None)
 
     async def test_blpop_constractor_non_zero_timeout(self):
         key, timeout = "my_list_blpop", "0.5"
-        command = BLPOP(key, timeout)
+        command = BLPOP(key, timeout).set_context(self.context)
 
         self.assertEqual(command.key, key)
         self.assertEqual(command.timeout, 0.5)
 
     async def test_blpop_non_blocking_rpush(self):
         key, value, timeout = "my_list_nonblocking_blpop", "apple", "0"
-        storage.set(key, [value])
+        self.context.storage.set(key, [value])
 
         self.assertEqual(
-            await BLPOP(key, timeout).execute(),
+            await BLPOP(key, timeout).set_context(self.context).execute(),
             b"*2\r\n$25\r\nmy_list_nonblocking_blpop\r\n$5\r\napple\r\n",
         )
 
@@ -291,8 +305,12 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         key, value, timeout = "my_list_blpop_rpush", "mango", "1"
 
         async with asyncio.TaskGroup() as task_group:
-            blpop = task_group.create_task(BLPOP(key, timeout).execute())
-            task_group.create_task(RPUSH(key, value).execute())
+            blpop = task_group.create_task(
+                BLPOP(key, timeout).set_context(self.context).execute()
+            )
+            task_group.create_task(
+                RPUSH(key, value).set_context(self.context).execute()
+            )
 
         self.assertEqual(
             blpop.result(),
@@ -303,8 +321,12 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         key, value, timeout = "my_list_blpop_lpush", "pear", ".5"
 
         async with asyncio.TaskGroup() as task_group:
-            blpop = task_group.create_task(BLPOP(key, timeout).execute())
-            task_group.create_task(LPUSH(key, value).execute())
+            blpop = task_group.create_task(
+                BLPOP(key, timeout).set_context(self.context).execute()
+            )
+            task_group.create_task(
+                LPUSH(key, value).set_context(self.context).execute()
+            )
 
         self.assertEqual(
             blpop.result(),
@@ -312,28 +334,36 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_type_missing(self):
-        self.assertEqual(await TYPE("missing_key").execute(), b"+none\r\n")
+        self.assertEqual(
+            await TYPE("missing_key").set_context(self.context).execute(), b"+none\r\n"
+        )
 
     async def test_type_list(self):
         key, value = "orange", "ready"
 
-        await RPUSH(key, value).execute()
+        await RPUSH(key, value).set_context(self.context).execute()
 
-        self.assertEqual(await TYPE(key).execute(), b"+list\r\n")
+        self.assertEqual(
+            await TYPE(key).set_context(self.context).execute(), b"+list\r\n"
+        )
 
     async def test_type_string(self):
         key, value = "orange", "ready"
 
-        await SET(key, value).execute()
+        await SET(key, value).set_context(self.context).execute()
 
-        self.assertEqual(await TYPE(key).execute(), b"+string\r\n")
+        self.assertEqual(
+            await TYPE(key).set_context(self.context).execute(), b"+string\r\n"
+        )
 
     async def test_type_stream(self):
         key = "temperature"
 
-        storage.set(key, Stream())
+        self.context.storage.set(key, Stream())
 
-        self.assertEqual(await TYPE(key).execute(), b"+stream\r\n")
+        self.assertEqual(
+            await TYPE(key).set_context(self.context).execute(), b"+stream\r\n"
+        )
 
     async def test_xadd_construtor_even_field_values(self):
         (
@@ -366,88 +396,99 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         ) = "stream_key 1526919030474-0 temperature 36 humidity 95".split()
 
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(),
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
             b"$15\r\n1526919030474-0\r\n",
         )
 
-        self.assertIsNotNone(storage.get(key))
+        self.assertIsNotNone(self.context.storage.get(key))
 
     async def test_xadd_execute_sequence(self):
         key, idx, *field_values = "stream_key 1-1 foo bar".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n1-1\r\n",
         )
         key, idx, *field_values = "stream_key 1-2 bar baz".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-2\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n1-2\r\n",
         )
 
-        self.assertEqual(len(storage.get(key)), 2)
+        self.assertEqual(len(self.context.storage.get(key)), 2)
 
     async def test_xadd_execute_invalid_idx_zero_zero(self):
         key, idx, *field_values = "stream_key 0-0 foo bar".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(),
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
             b"-ERR The ID specified in XADD must be greater than 0-0\r\n",
         )
 
     async def test_xadd_execute_invalid_idx_zero_zero_after_valid(self):
         key, idx, *field_values = "stream_key 1-0 foo bar".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-0\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n1-0\r\n",
         )
 
         key, idx, *field_values = "stream_key 0-0 bar baz".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(),
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
             b"-ERR The ID specified in XADD must be greater than 0-0\r\n",
         )
 
     async def test_xadd_execute_invalid_duplicated_idx(self):
         key, idx, *field_values = "stream_key 1-1 foo bar".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n1-1\r\n",
         )
         key, idx, *field_values = "stream_key 1-1 bar baz".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(),
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
             b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n",
         )
 
     async def test_xadd_execute_invalid_smaler_idx(self):
         key, idx, *field_values = "stream_key 1-1 foo bar".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n1-1\r\n",
         )
         key, idx, *field_values = "stream_key 0-1 bar baz".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(),
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
             b"-ERR The ID specified in XADD is equal or smaller than the target stream top item\r\n",
         )
 
     async def test_xadd_execute_star_idx_seq_num_multiple(self):
         key, idx, *field_values = "stream_key 0-* foo bar".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n0-1\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n0-1\r\n",
         )
 
     async def test_xadd_execute_star_idx_seq_num_multiple2(self):
         key, idx, *field_values = "stream_key 1-1 foo bar".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-1\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n1-1\r\n",
         )
         key, idx, *field_values = "stream_key 1-* bar baz".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n1-2\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n1-2\r\n",
         )
         key, idx, *field_values = "stream_key 2-* baz qux".split()
         self.assertEqual(
-            await XADD(key, idx, *field_values).execute(), b"$3\r\n2-0\r\n"
+            await XADD(key, idx, *field_values).set_context(self.context).execute(),
+            b"$3\r\n2-0\r\n",
         )
 
     async def test_xadd_execute_star(self):
         key, idx, *field_values = "stream_key * foo bar".split()
-        idx_out = await XADD(key, idx, *field_values).execute()
+        idx_out = (
+            await XADD(key, idx, *field_values).set_context(self.context).execute()
+        )
         self.assertEqual(idx_out[:5], b"$15\r\n")
 
     async def test_xrange_constructor(self):
@@ -475,11 +516,21 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cmd.end, "9" * 20)
 
     async def test_xrange(self):
-        await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
-        await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
-        await XADD(*"stream_key_xrange 0-3 baz foo".split()).execute()
+        await XADD(*"stream_key_xrange 0-1 foo bar".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange 0-2 bar baz".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange 0-3 baz foo".split()).set_context(
+            self.context
+        ).execute()
 
-        encoded = await XRANGE(*"stream_key_xrange 0-2 0-3".split()).execute()
+        encoded = (
+            await XRANGE(*"stream_key_xrange 0-2 0-3".split())
+            .set_context(self.context)
+            .execute()
+        )
 
         self.assertEqual(
             encoded,
@@ -487,11 +538,21 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_xrange_minus_plus(self):
-        await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
-        await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
-        await XADD(*"stream_key_xrange 0-3 baz foo".split()).execute()
+        await XADD(*"stream_key_xrange 0-1 foo bar".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange 0-2 bar baz".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange 0-3 baz foo".split()).set_context(
+            self.context
+        ).execute()
 
-        encoded = await XRANGE(*"stream_key_xrange - +".split()).execute()
+        encoded = (
+            await XRANGE(*"stream_key_xrange - +".split())
+            .set_context(self.context)
+            .execute()
+        )
 
         self.assertEqual(
             encoded,
@@ -499,7 +560,11 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_xrange_empty(self):
-        encoded = await XRANGE(*"stream_key_xrange 0-2 0-3".split()).execute()
+        encoded = (
+            await XRANGE(*"stream_key_xrange 0-2 0-3".split())
+            .set_context(self.context)
+            .execute()
+        )
         self.assertEqual(encoded, b"*0\r\n")
 
     async def test_xread_constructor_streams(self):
@@ -542,11 +607,21 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(cmd.new_only)
 
     async def test_xread(self):
-        await XADD(*"stream_key_xrange 0-1 foo bar".split()).execute()
-        await XADD(*"stream_key_xrange 0-2 bar baz".split()).execute()
-        await XADD(*"stream_key_xrange 0-3 baz foo".split()).execute()
+        await XADD(*"stream_key_xrange 0-1 foo bar".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange 0-2 bar baz".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange 0-3 baz foo".split()).set_context(
+            self.context
+        ).execute()
 
-        encoded = await XREAD(*"streams stream_key_xrange 0-0".split()).execute()
+        encoded = (
+            await XREAD(*"streams stream_key_xrange 0-0".split())
+            .set_context(self.context)
+            .execute()
+        )
 
         self.assertEqual(
             encoded,
@@ -554,14 +629,26 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_xread_multiple(self):
-        await XADD(*"stream_key_xrange_1 0-1 foo bar".split()).execute()
-        await XADD(*"stream_key_xrange_1 0-2 bar baz".split()).execute()
-        await XADD(*"stream_key_xrange_1 0-3 bar baz".split()).execute()
-        await XADD(*"stream_key_xrange_2 0-3 baz foo".split()).execute()
-
-        encoded = await XREAD(
-            *"streams stream_key_xrange_1 stream_key_xrange_2 0-1 0-2".split()
+        await XADD(*"stream_key_xrange_1 0-1 foo bar".split()).set_context(
+            self.context
         ).execute()
+        await XADD(*"stream_key_xrange_1 0-2 bar baz".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange_1 0-3 bar baz".split()).set_context(
+            self.context
+        ).execute()
+        await XADD(*"stream_key_xrange_2 0-3 baz foo".split()).set_context(
+            self.context
+        ).execute()
+
+        encoded = (
+            await XREAD(
+                *"streams stream_key_xrange_1 stream_key_xrange_2 0-1 0-2".split()
+            )
+            .set_context(self.context)
+            .execute()
+        )
 
         self.assertEqual(
             encoded,
@@ -595,38 +682,47 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
     async def test_incr_present(self):
         key = "foo-present"
 
-        self.assertEqual(await SET(key, "1").execute(), b"+OK\r\n")
+        self.assertEqual(
+            await SET(key, "1").set_context(self.context).execute(), b"+OK\r\n"
+        )
 
-        self.assertEqual(await INCR(key).execute(), b":2\r\n")
+        self.assertEqual(await INCR(key).set_context(self.context).execute(), b":2\r\n")
 
-        self.assertEqual(await GET(key).execute(), b"$1\r\n2\r\n")
+        self.assertEqual(
+            await GET(key).set_context(self.context).execute(), b"$1\r\n2\r\n"
+        )
 
     async def test_incr_missing(self):
         key = "foo-missing"
 
-        self.assertEqual(await INCR(key).execute(), b":1\r\n")
+        self.assertEqual(await INCR(key).set_context(self.context).execute(), b":1\r\n")
 
-        self.assertEqual(await GET(key).execute(), b"$1\r\n1\r\n")
+        self.assertEqual(
+            await GET(key).set_context(self.context).execute(), b"$1\r\n1\r\n"
+        )
 
     async def test_incr_non_int(self):
         key = "foo-non-int"
 
-        self.assertEqual(await SET(key, "hello").execute(), b"+OK\r\n")
+        self.assertEqual(
+            await SET(key, "hello").set_context(self.context).execute(), b"+OK\r\n"
+        )
 
         self.assertEqual(
-            await INCR(key).execute(),
+            await INCR(key).set_context(self.context).execute(),
             b"-ERR value is not an integer or out of range\r\n",
         )
 
-        self.assertEqual(await GET(key).execute(), b"$5\r\nhello\r\n")
+        self.assertEqual(
+            await GET(key).set_context(self.context).execute(), b"$5\r\nhello\r\n"
+        )
 
     async def test_multi(self):
-        self.assertEqual(await MULTI().execute(), b"+OK\r\n")
+        self.assertEqual(await MULTI().set_context(self.context).execute(), b"+OK\r\n")
 
     async def test_info_replication_master(self):
-        context = Context(args=Args())
         self.assertEqual(
-            await INFO("replication").set_context(context).execute(),
+            await INFO("replication").set_context(self.context).execute(),
             encode(
                 "role:master\n"
                 "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb\n"
@@ -642,8 +738,9 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_replconf_replica_ports(self):
-        context = Context(args=Args())
-        REPLCONF(*"listening-port 6767".split()).set_context(context)
+        cmd = REPLCONF(*"listening-port 6767".split())
+
+        self.assertEqual(cmd.port, 6767)
 
     async def test_replconf(self):
         self.assertEqual(decode(await REPLCONF().execute()), "OK")
@@ -690,14 +787,19 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_reading_keys_star_foo_bar(self):
-        storage.load_from_rdb_dump("dumps", "foo-bar.rdb")
-        self.assertEqual(await KEYS("*").execute(), encode(["foo"]))
+        self.context.storage.load_from_rdb_dump("dumps", "foo-bar.rdb")
+        self.assertEqual(
+            await KEYS("*").set_context(self.context).execute(), encode(["foo"])
+        )
 
     async def test_subscribe(self):
         session = Session()
 
         self.assertEqual(
-            await SUBSCRIBE("mychan").set_session(session).execute(),
+            await SUBSCRIBE("mychan")
+            .set_session(session)
+            .set_context(self.context)
+            .execute(),
             encode(["subscribe", "mychan", 1]),
         )
 
@@ -705,15 +807,24 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         session = Session()
 
         self.assertEqual(
-            await SUBSCRIBE("my-chan1").set_session(session).execute(),
+            await SUBSCRIBE("my-chan1")
+            .set_session(session)
+            .set_context(self.context)
+            .execute(),
             encode(["subscribe", "my-chan1", 1]),
         )
         self.assertEqual(
-            await SUBSCRIBE("my-chan2").set_session(session).execute(),
+            await SUBSCRIBE("my-chan2")
+            .set_session(session)
+            .set_context(self.context)
+            .execute(),
             encode(["subscribe", "my-chan2", 2]),
         )
         self.assertEqual(
-            await SUBSCRIBE("my-chan1").set_session(session).execute(),
+            await SUBSCRIBE("my-chan1")
+            .set_session(session)
+            .set_context(self.context)
+            .execute(),
             encode(["subscribe", "my-chan1", 2]),
         )
 
@@ -752,70 +863,71 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.subscriptions(), 0)
 
     async def test_zrank_present(self):
-        context = Context(args=Args())
-        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
-        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
-        await ZADD(*"zset_key 20.0 baz".split()).set_context(context).execute()
-        await ZADD(*"zset_key 30.1 caz".split()).set_context(context).execute()
-        await ZADD(*"zset_key 40.2 paz".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 20.0 baz".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 30.1 caz".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 40.2 paz".split()).set_context(self.context).execute()
 
         self.assertEqual(
-            await ZRANK(*"zset_key baz".split()).set_context(context).execute(),
+            await ZRANK(*"zset_key baz".split()).set_context(self.context).execute(),
             encode(0),
         )
         self.assertEqual(
-            await ZRANK(*"zset_key caz".split()).set_context(context).execute(),
+            await ZRANK(*"zset_key caz".split()).set_context(self.context).execute(),
             encode(1),
         )
         self.assertEqual(
-            await ZRANK(*"zset_key paz".split()).set_context(context).execute(),
+            await ZRANK(*"zset_key paz".split()).set_context(self.context).execute(),
             encode(2),
         )
         self.assertEqual(
-            await ZRANK(*"zset_key bar".split()).set_context(context).execute(),
+            await ZRANK(*"zset_key bar".split()).set_context(self.context).execute(),
             encode(3),
         )
         self.assertEqual(
-            await ZRANK(*"zset_key foo".split()).set_context(context).execute(),
+            await ZRANK(*"zset_key foo".split()).set_context(self.context).execute(),
             encode(4),
         )
 
     async def test_zrank_missing(self):
-        context = Context(args=Args())
-
-        cmd = ZRANK(*"my_sorted_set banana".split()).set_context(context)
+        cmd = ZRANK(*"my_sorted_set banana".split()).set_context(self.context)
 
         self.assertEqual(await cmd.execute(), b"$-1\r\n")
 
     async def test_zrange(self):
-        context = Context(args=Args())
-        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
-        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
-        await ZADD(*"zset_key 20.0 baz".split()).set_context(context).execute()
-        await ZADD(*"zset_key 30.1 caz".split()).set_context(context).execute()
-        await ZADD(*"zset_key 40.2 paz".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 20.0 baz".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 30.1 caz".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 40.2 paz".split()).set_context(self.context).execute()
 
         self.assertEqual(
             decode(
-                await ZRANGE(*"zset_key 2 4".split()).set_context(context).execute()
+                await ZRANGE(*"zset_key 2 4".split())
+                .set_context(self.context)
+                .execute()
             ),
             ["paz", "bar", "foo"],
         )
 
     async def test_zrange_negative_indexes(self):
-        context = Context(args=Args())
         await ZADD(*"racer_scores 8.5 Sam-Bodden".split()).set_context(
-            context
+            self.context
         ).execute()
-        await ZADD(*"racer_scores 10.2 Royce".split()).set_context(context).execute()
-        await ZADD(*"racer_scores 6.1 Ford".split()).set_context(context).execute()
-        await ZADD(*"racer_scores 14.9 Prickett".split()).set_context(context).execute()
-        await ZADD(*"racer_scores 10.2 Ben".split()).set_context(context).execute()
+        await ZADD(*"racer_scores 10.2 Royce".split()).set_context(
+            self.context
+        ).execute()
+        await ZADD(*"racer_scores 6.1 Ford".split()).set_context(self.context).execute()
+        await ZADD(*"racer_scores 14.9 Prickett".split()).set_context(
+            self.context
+        ).execute()
+        await ZADD(*"racer_scores 10.2 Ben".split()).set_context(self.context).execute()
 
         self.assertEqual(
             decode(
                 await ZRANGE(*"racer_scores -2 -1".split())
-                .set_context(context)
+                .set_context(self.context)
                 .execute()
             ),
             ["Royce", "Prickett"],
@@ -823,89 +935,78 @@ class TestCommand(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             decode(
                 await ZRANGE(*"racer_scores 0 -3".split())
-                .set_context(context)
+                .set_context(self.context)
                 .execute()
             ),
             ["Ford", "Sam-Bodden", "Ben"],
         )
 
     async def test_zcard(self):
-        context = Context(args=Args())
-        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
-        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
-        await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 20.0 foo".split()).set_context(self.context).execute()
 
         self.assertEqual(
-            decode(await ZCARD("zset_key").set_context(context).execute()), 2
+            decode(await ZCARD("zset_key").set_context(self.context).execute()), 2
         )
 
     async def test_zcard_missing(self):
-        context = Context(args=Args())
-
         self.assertEqual(
-            decode(await ZCARD("zset_key").set_context(context).execute()), 0
+            decode(await ZCARD("zset_key").set_context(self.context).execute()), 0
         )
 
     async def test_zscore(self):
-        context = Context(args=Args())
-        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
-        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
-        await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 20.0 foo".split()).set_context(self.context).execute()
 
         self.assertEqual(
-            await ZSCORE(*"zset_key bar".split()).set_context(context).execute(),
+            await ZSCORE(*"zset_key bar".split()).set_context(self.context).execute(),
             encode("100.0"),
         )
 
     async def test_zscore_missing_member(self):
-        context = Context(args=Args())
-
-        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(self.context).execute()
 
         self.assertEqual(
             await ZSCORE(*"zset_key missing_key".split())
-            .set_context(context)
+            .set_context(self.context)
             .execute(),
             encode(None),
         )
 
     async def test_zscore_missing_member_set(self):
-        context = Context(args=Args())
-
         self.assertEqual(
             await ZSCORE(*"missing_set missing_key".split())
-            .set_context(context)
+            .set_context(self.context)
             .execute(),
             encode(None),
         )
 
     async def test_zrem(self):
-        context = Context(args=Args())
-        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
-        await ZADD(*"zset_key 100.0 bar".split()).set_context(context).execute()
-        await ZADD(*"zset_key 20.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 100.0 bar".split()).set_context(self.context).execute()
+        await ZADD(*"zset_key 20.0 foo".split()).set_context(self.context).execute()
 
         self.assertEqual(
-            await ZREM(*"zset_key bar".split()).set_context(context).execute(),
+            await ZREM(*"zset_key bar".split()).set_context(self.context).execute(),
             encode(1),
         )
 
     async def test_zrem_missing_member(self):
-        context = Context(args=Args())
-
-        await ZADD(*"zset_key 100.0 foo".split()).set_context(context).execute()
+        await ZADD(*"zset_key 100.0 foo".split()).set_context(self.context).execute()
 
         self.assertEqual(
-            await ZREM(*"zset_key missing_key".split()).set_context(context).execute(),
+            await ZREM(*"zset_key missing_key".split())
+            .set_context(self.context)
+            .execute(),
             encode(0),
         )
 
     async def test_zrem_missing_member_set(self):
-        context = Context(args=Args())
-
         self.assertEqual(
             await ZREM(*"missing_set missing_key".split())
-            .set_context(context)
+            .set_context(self.context)
             .execute(),
             encode(0),
         )

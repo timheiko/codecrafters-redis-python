@@ -9,7 +9,7 @@ from app.context import Context
 from app.log import log
 from app.resp import decode, encode, encode_simple
 
-from app.storage import Stream, StreamEntry, storage
+from app.storage import Stream, StreamEntry
 
 
 @dataclass
@@ -113,7 +113,7 @@ class CommandRegistry:
 
                 return await cmd_instance.execute()
             elif transaction_id in self.__transactions:
-                self.__transactions[transaction_id].append(cmd_class(*args))
+                self.__transactions[transaction_id].append(cmd_instance)
                 return encode_simple("QUEUED")
             else:
                 return await cmd_instance.execute()
@@ -241,9 +241,9 @@ class SET(RedisCommand):
 
     async def execute(self):
         if self.ttlms is not None:
-            storage.set(self.key, self.value, self.ttlms)
+            self.context.storage.set(self.key, self.value, self.ttlms)
         else:
-            storage.set(self.key, self.value)
+            self.context.storage.set(self.key, self.value)
 
         if self.has_context():
             self.context.need_preplica_ack = len(self.context.replicas) > 0
@@ -270,7 +270,7 @@ class GET(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        return storage.get(self.key)
+        return self.context.storage.get(self.key)
 
 
 @registry.register
@@ -286,7 +286,7 @@ class LLEN(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        return len(storage.get_list(self.key))
+        return len(self.context.storage.get_list(self.key))
 
 
 @registry.register
@@ -307,7 +307,7 @@ class LPOP(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        values = storage.get_list(self.key)
+        values = self.context.storage.get_list(self.key)
         if not values:
             return None
         elif self.count == 1:
@@ -334,7 +334,7 @@ class LRANGE(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        return storage.get_list_range(self.key, self.start, self.end)
+        return self.context.storage.get_list_range(self.key, self.start, self.end)
 
 
 @registry.register
@@ -352,9 +352,9 @@ class RPUSH(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        values = storage.get_list(self.key)
+        values = self.context.storage.get_list(self.key)
         values.extend(self.items)
-        storage.set(self.key, values)
+        self.context.storage.set(self.key, values)
         await notify_waiting_list(self.key, len(values))
         return len(values)
 
@@ -374,9 +374,9 @@ class LPUSH(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        values = storage.get_list(self.key)
+        values = self.context.storage.get_list(self.key)
         values = self.items[::-1] + values
-        storage.set(self.key, values)
+        self.context.storage.set(self.key, values)
         await notify_waiting_list(self.key, len(values))
         return len(values)
 
@@ -396,11 +396,14 @@ class BLPOP(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        values = storage.get_list(self.key)
+        values = self.context.storage.get_list(self.key)
         if values:
             return [self.key, values.pop(0)]
         else:
-            callback = lambda: [self.key, storage.get_list(self.key).pop(0)]
+            callback = lambda: [
+                self.key,
+                self.context.storage.get_list(self.key).pop(0),
+            ]
             value = await join_waiting_list(self.key, self.timeout, callback)
             return value
 
@@ -418,7 +421,7 @@ class TYPE(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        match storage.get(self.key):
+        match self.context.storage.get(self.key):
             case None:
                 return "none"
             case str(_):
@@ -454,12 +457,12 @@ class XADD(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        stream = storage.get_stream(self.key)
+        stream = self.context.storage.get_stream(self.key)
         try:
             entry = stream.append(
                 StreamEntry(idx=self.idx, field_values=self.field_values)
             )
-            storage.set(self.key, stream)
+            self.context.storage.set(self.key, stream)
             await notify_waiting_list(self.key, 1)
             return entry.idx
         except ValueError as error:
@@ -488,7 +491,10 @@ class XRANGE(RedisCommand):
                 raise ValueError
 
     async def apply(self) -> list[list[Sequence[str]]]:
-        stream: Stream = storage.get_stream(self.key)
+        if self.context is None:
+            return []
+
+        stream: Stream = self.context.storage.get_stream(self.key)
         return [
             [entry.idx, list(entry.field_values)]
             for entry in stream.entries
@@ -569,12 +575,15 @@ class XREAD(RedisCommand):
     Response = list[Sequence[Sequence[Sequence[str]]]]
 
     def __query(self, ts: datetime = datetime.fromtimestamp(0)) -> list[Response]:
+        if self.context is None:
+            return []
+
         return [
             [
                 key,
                 [
                     [entry.idx, list(entry.field_values)]
-                    for entry in storage.get_stream(key).entries
+                    for entry in self.context.storage.get_stream(key).entries
                     if ts < entry.ts and start < entry.idx
                 ],
             ]
@@ -621,11 +630,11 @@ class INCR(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        value = storage.get(self.key)
+        value = self.context.storage.get(self.key)
         try:
             value = int(value) if value is not None else 0
             value += 1
-            storage.set(self.key, str(value))
+            self.context.storage.set(self.key, str(value))
             return value
         except ValueError:
             return ValueError("value is not an integer or out of range")
@@ -855,7 +864,7 @@ class KEYS(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        return storage.get_keys()
+        return self.context.storage.get_keys()
 
 
 subscribers: dict[str, list[Session]] = defaultdict(list)
@@ -1016,7 +1025,9 @@ class ZADD(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        added = storage.add_to_sorted_set(self.set_name, self.priority, self.member)
+        added = self.context.storage.add_to_sorted_set(
+            self.set_name, self.priority, self.member
+        )
         return int(added)
 
 
@@ -1039,7 +1050,7 @@ class ZRANK(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        sorted_set = storage.get_sorted_set(self.set_name)
+        sorted_set = self.context.storage.get_sorted_set(self.set_name)
         if self.member not in sorted_set:
             return None
 
@@ -1070,7 +1081,7 @@ class ZRANGE(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        sorted_set = storage.get_sorted_set(self.set_name)
+        sorted_set = self.context.storage.get_sorted_set(self.set_name)
         n = len(sorted_set)
         start = self.start if self.start >= 0 else max(0, n + self.start)
         stop = (self.stop if self.stop >= 0 else max(0, n + self.stop)) + 1
@@ -1097,7 +1108,7 @@ class ZCARD(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        sorted_set = storage.get_sorted_set(self.set_name)
+        sorted_set = self.context.storage.get_sorted_set(self.set_name)
         return len(sorted_set)
 
 
@@ -1120,7 +1131,7 @@ class ZSCORE(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        sorted_set = storage.get_sorted_set(self.set_name)
+        sorted_set = self.context.storage.get_sorted_set(self.set_name)
         if self.member not in sorted_set:
             return None
         return str(sorted_set.get(self.member))
@@ -1145,7 +1156,7 @@ class ZREM(RedisCommand):
                 raise ValueError
 
     async def apply(self):
-        sorted_set = storage.get_sorted_set(self.set_name)
+        sorted_set = self.context.storage.get_sorted_set(self.set_name)
         if self.member not in sorted_set:
             return 0
 

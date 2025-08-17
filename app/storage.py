@@ -132,9 +132,6 @@ class Storage:
         return is_new
 
 
-storage = Storage()
-
-
 def load_from_rdb_dump(dirname: str, dbfilename: str) -> dict[str, tuple[Any, int]]:
     def read_int(file: BufferedRandom, count: int) -> int:
         return int.from_bytes(file.read(count), byteorder="big")

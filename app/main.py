@@ -7,6 +7,7 @@ from app.command import PSYNC, Context, Session, registry
 
 from app.resp import decode, decode_commands, encode
 from app.log import log
+from signal import SIGINT, SIGTERM
 
 
 context = Context(parse_args())
@@ -88,6 +89,10 @@ async def handshake():
 
 
 async def main():
+    loop = asyncio.get_running_loop()
+    for sig in (SIGTERM, SIGINT):
+        loop.add_signal_handler(sig, signal_handler, sig)
+
     server = await asyncio.start_server(
         handle_connection, "localhost", context.args.port
     )
@@ -98,12 +103,21 @@ async def main():
     await handshake()
     storage.load_from_rdb_dump(context.args.dir, context.args.dbfilename)
 
-    async with server:
-        await server.serve_forever()
+    try:
+        async with server:
+            await server.serve_forever()
+    except asyncio.CancelledError:
+        log("Shutting down")
+
+
+def signal_handler(sig: int) -> None:
+    loop = asyncio.get_running_loop()
+    for task in asyncio.all_tasks(loop=loop):
+        task.cancel()
+    print(f"Got signal: {sig!s}, shutting down.")
+    loop.remove_signal_handler(SIGTERM)
+    loop.add_signal_handler(SIGINT, lambda: None)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("Exiting")
+    asyncio.run(main())

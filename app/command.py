@@ -551,15 +551,15 @@ class XREAD(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self) -> bytes:
+    async def apply(self) -> bytes:
         response = self.__query()
         match self.kind:
             case self.STREAMS:
-                return encode(response)
+                return response
             case self.BLOCK:
                 if not self.new_only:
                     if list(key for key, values in response if len(values)):
-                        return encode(response)
+                        return response
 
                 ts = datetime.now() if self.new_only else datetime.fromtimestamp(0)
                 callback = lambda: self.__query(ts)
@@ -576,8 +576,8 @@ class XREAD(RedisCommand):
 
                 if len(finished_tasks) > 0:
                     task = list(finished_tasks)[0]
-                    return encode(task.result())
-                return encode(None)
+                    return task.result()
+                return None
             case _:
                 raise ValueError
 
@@ -635,15 +635,15 @@ class INCR(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         value = storage.get(self.key)
         try:
             value = int(value) if value is not None else 0
             value += 1
             storage.set(self.key, str(value))
-            return encode(value)
+            return value
         except ValueError:
-            return encode(ValueError("value is not an integer or out of range"))
+            return ValueError("value is not an integer or out of range")
 
 
 @registry.register
@@ -705,25 +705,21 @@ class INFO(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         match self.info:
             case self.REPLICATION:
                 if not self.context.args.is_master():
-                    return encode(
-                        "\n".join(
-                            [
-                                "role:slave",
-                            ]
-                        )
-                    )
-                return encode(
-                    "\n".join(
+                    return "\n".join(
                         [
-                            "role:master",
-                            "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
-                            "master_repl_offset:0",
+                            "role:slave",
                         ]
                     )
+                return "\n".join(
+                    [
+                        "role:master",
+                        "master_replid:8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
+                        "master_repl_offset:0",
+                    ]
                 )
             case _:
                 raise ValueError

@@ -22,7 +22,7 @@ class StreamEntry:
         self.field_values = field_values
         self.ts = ts if ts is not None else datetime.now()
 
-    def increment_idx_seq_num_and_get(self, other: Self | None = None) -> Self:
+    def increment_idx_seq_num_and_get(self, other: Self | None = None) -> "StreamEntry":
         match self.idx.split("-"):
             case [idx_ms, "*"]:
                 if other is None or other.idx < self.idx:
@@ -38,13 +38,13 @@ class StreamEntry:
                     idx=f"{idx_ms}-{seq_num}",
                     field_values=self.field_values,
                     ts=self.ts,
-                )  # type: ignore
+                )
             case ["*"]:
                 return StreamEntry(
                     idx=f"{int(time.time() * 1_000)}-0",
                     field_values=self.field_values,
                     ts=self.ts,
-                )  # type: ignore
+                )
             case _:
                 return self
 

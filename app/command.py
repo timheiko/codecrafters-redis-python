@@ -790,15 +790,15 @@ class WAIT(RedisCommand):
                 self.min_replicas = int(min_replicas)
                 self.timeout = float(timeout) / 1_000 if float(timeout) != 0 else None
 
-    async def execute(self):
+    async def apply(self):
         if self.has_context():
             if not self.context.need_preplica_ack:
-                return encode(len(self.context.replicas))
+                return len(self.context.replicas)
 
             self.context.need_preplica_ack = False
 
             if len(self.context.replicas) == 0:
-                return encode(0)
+                return 0
 
             async def wait_for_acknolegement(reader, writer):
                 writer.write(encode("REPLCONF GETACK *".split()))
@@ -820,10 +820,8 @@ class WAIT(RedisCommand):
             for task in _pending_tasks:
                 task.cancel()
 
-            return encode(
-                len([task for task in finished_tasks if not task.cancelled()])
-            )
-        return encode(0)
+            return len([task for task in finished_tasks if not task.cancelled()])
+        return 0
 
 
 @registry.register
@@ -844,7 +842,7 @@ class CONFIG(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         configs = []
 
         if self.DIR in self.params:
@@ -852,7 +850,7 @@ class CONFIG(RedisCommand):
         if self.DBFILENAME in self.params:
             configs.extend([self.DBFILENAME, self.context.args.dbfilename])
 
-        return encode(configs)
+        return configs
 
 
 @registry.register
@@ -871,8 +869,8 @@ class KEYS(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
-        return encode(storage.get_keys())
+    async def apply(self):
+        return storage.get_keys()
 
 
 subscribers: dict[str, list[Session]] = defaultdict(list)
@@ -894,11 +892,11 @@ class SUBSCRIBE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         if self.session.subscribe(self.channel):
             subscribers[self.channel].append(self.session)
 
-        return encode(["subscribe", self.channel, self.session.subscriptions()])
+        return ["subscribe", self.channel, self.session.subscriptions()]
 
 
 @registry.register
@@ -917,11 +915,11 @@ class UNSUBSCRIBE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         if self.session.unsubscribe(self.channel):
             subscribers[self.channel].remove(self.session)
 
-        return encode(["unsubscribe", self.channel, self.session.subscriptions()])
+        return ["unsubscribe", self.channel, self.session.subscriptions()]
 
 
 @registry.register
@@ -984,7 +982,7 @@ class PUBLISH(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         count = 0
         for session in subscribers[self.channel]:
             try:
@@ -993,7 +991,7 @@ class PUBLISH(RedisCommand):
                 count += 1
             except Exception as e:
                 log(e)
-        return encode(count)
+        return count
 
 
 @registry.register
@@ -1008,8 +1006,8 @@ class COMMAND(RedisCommand):
     def __init__(self, *_args):
         pass
 
-    async def execute(self):
-        return encode([])
+    async def apply(self):
+        return []
 
 
 @registry.register
@@ -1032,9 +1030,9 @@ class ZADD(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         added = storage.add_to_sorted_set(self.set_name, self.priority, self.member)
-        return encode(int(added))
+        return int(added)
 
 
 @registry.register
@@ -1055,15 +1053,15 @@ class ZRANK(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         sorted_set = storage.get_sorted_set(self.set_name)
         if self.member not in sorted_set:
-            return encode(None)
+            return None
 
         sorted_items = sorted(sorted_set.items(), key=lambda item: (item[-1], item[0]))
         src = [member for member, _ in sorted_items]
         index = src.index(self.member)
-        return encode(index)
+        return index
 
 
 @registry.register
@@ -1086,7 +1084,7 @@ class ZRANGE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         sorted_set = storage.get_sorted_set(self.set_name)
         n = len(sorted_set)
         start = self.start if self.start >= 0 else max(0, n + self.start)
@@ -1094,7 +1092,7 @@ class ZRANGE(RedisCommand):
 
         sorted_items = sorted(sorted_set.items(), key=lambda item: (item[-1], item[0]))
         zrange = [member for member, _ in sorted_items]
-        return encode(zrange[start:stop])
+        return zrange[start:stop]
 
 
 @registry.register
@@ -1113,9 +1111,9 @@ class ZCARD(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         sorted_set = storage.get_sorted_set(self.set_name)
-        return encode(len(sorted_set))
+        return len(sorted_set)
 
 
 @registry.register
@@ -1136,11 +1134,11 @@ class ZSCORE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         sorted_set = storage.get_sorted_set(self.set_name)
         if self.member not in sorted_set:
-            return encode(None)
-        return encode(str(sorted_set.get(self.member)))
+            return None
+        return str(sorted_set.get(self.member))
 
 
 @registry.register
@@ -1161,10 +1159,10 @@ class ZREM(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         sorted_set = storage.get_sorted_set(self.set_name)
         if self.member not in sorted_set:
-            return encode(0)
+            return 0
 
         del sorted_set[self.member]
-        return encode(1)
+        return 1

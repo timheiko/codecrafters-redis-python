@@ -179,11 +179,17 @@ class RedisCommand(ABC):
     def has_context(self) -> bool:
         return self.context is not None
 
-    @abstractmethod
     async def execute(self) -> bytes | list[bytes]:
         """
         Executes the command and returns bytes to be sent to client
         """
+        return self.encode(await self.apply())
+
+    async def apply(self) -> Any:
+        pass
+
+    def encode(self, payload: Any) -> bytes:
+        return encode(payload)
 
 
 @registry.register
@@ -277,8 +283,8 @@ class GET(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
-        return encode(storage.get(self.key))
+    async def apply(self):
+        return storage.get(self.key)
 
 
 @registry.register
@@ -293,8 +299,8 @@ class LLEN(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
-        return encode(len(storage.get_list(self.key)))
+    async def apply(self):
+        return len(storage.get_list(self.key))
 
 
 @registry.register
@@ -314,15 +320,15 @@ class LPOP(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         values = storage.get_list(self.key)
         if not values:
-            return encode(None)
+            return None
         elif self.count == 1:
-            return encode(values.pop(0))
+            return values.pop(0)
         popped = values[: self.count]
         values[: self.count] = []
-        return encode(popped)
+        return popped
 
 
 @registry.register
@@ -341,8 +347,8 @@ class LRANGE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
-        return encode(storage.get_list_range(self.key, self.start, self.end))
+    async def apply(self):
+        return storage.get_list_range(self.key, self.start, self.end)
 
 
 @registry.register
@@ -359,12 +365,12 @@ class RPUSH(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         values = storage.get_list(self.key)
         values.extend(self.items)
         storage.set(self.key, values)
         await notify_waiting_list(self.key, len(values))
-        return encode(len(values))
+        return len(values)
 
 
 @registry.register
@@ -381,12 +387,12 @@ class LPUSH(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         values = storage.get_list(self.key)
         values = self.items[::-1] + values
         storage.set(self.key, values)
         await notify_waiting_list(self.key, len(values))
-        return encode(len(values))
+        return len(values)
 
 
 @registry.register
@@ -403,14 +409,14 @@ class BLPOP(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         values = storage.get_list(self.key)
         if values:
-            return encode([self.key, values.pop(0)])
+            return [self.key, values.pop(0)]
         else:
             callback = lambda: [self.key, storage.get_list(self.key).pop(0)]
             value = await join_waiting_list(self.key, self.timeout, callback)
-            return encode(value)
+            return value
 
 
 @registry.register
@@ -425,18 +431,21 @@ class TYPE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         match storage.get(self.key):
             case None:
-                return encode_simple("none")
+                return "none"
             case str(_):
-                return encode_simple("string")
+                return "string"
             case [*_]:
-                return encode_simple("list")
+                return "list"
             case Stream():
-                return encode_simple("stream")
+                return "stream"
             case _:
                 raise ValueError
+
+    def encode(self, payload):
+        return encode_simple(payload)
 
 
 @registry.register
@@ -458,7 +467,7 @@ class XADD(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self):
+    async def apply(self):
         stream = storage.get_stream(self.key)
         try:
             entry = stream.append(
@@ -466,10 +475,10 @@ class XADD(RedisCommand):
             )
             storage.set(self.key, stream)
             await notify_waiting_list(self.key, 1)
-            return encode(entry.idx)
+            return entry.idx
         except ValueError as error:
             log("encode(error)", encode(error))
-            return encode(error)
+            return error
 
 
 @registry.register
@@ -492,14 +501,14 @@ class XRANGE(RedisCommand):
             case _:
                 raise ValueError
 
-    async def execute(self) -> bytes:
+    async def apply(self) -> bytes:
         stream: Stream = storage.get_stream(self.key)
         entries = [
             [entry.idx, list(entry.field_values)]
             for entry in stream.entries
             if self.start <= entry.idx <= self.end
         ]
-        return encode(entries)
+        return entries
 
 
 @registry.register

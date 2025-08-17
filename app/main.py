@@ -1,5 +1,6 @@
 import asyncio
 from asyncio import StreamReader, StreamWriter
+import os
 
 from app.storage import storage
 from app.args import parse_args
@@ -51,9 +52,9 @@ async def handle_connection(reader: StreamReader, writer: StreamWriter) -> None:
 async def handle_commands(reader: StreamReader, writer: StreamWriter) -> None:
     await handle_connection(reader, writer)
 
-    # if (reader, writer) not in context.replicas:
-    #     writer.close()
-    #     await writer.wait_closed()
+    if (reader, writer) not in context.replicas:
+        writer.close()
+        await writer.wait_closed()
 
 
 async def handshake():
@@ -109,6 +110,8 @@ async def main():
 
 
 async def add_signal_handlers() -> None:
+    log(f"Running process id: {os.getpid()}")
+
     loop = asyncio.get_running_loop()
 
     def signal_handler(sig: int) -> None:

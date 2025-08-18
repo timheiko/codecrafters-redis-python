@@ -608,7 +608,7 @@ async def notify_waiting_list(key: str, times: int) -> None:
     for _ in range(times):
         while len(waiting_queue[key]) > 0:
             future = waiting_queue[key].popleft()
-            if not future.cancelled() and not future.done():
+            if not future.done():
                 future.set_result(True)
                 break
 
